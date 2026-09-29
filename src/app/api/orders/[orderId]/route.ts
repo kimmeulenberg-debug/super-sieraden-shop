@@ -1,0 +1,75 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getOrderById, updateOrderStatus, OrderServiceError, ORDER_STATUSES } from "@/lib/orders";
+
+/**
+ * GET/PATCH voor een enkele order. Routes zijn thin: valideren, delegeren
+ * naar src/lib/orders.ts, resultaat teruggeven.
+ *
+ * Let op: momenteel geen authenticatie/autorisatie. PATCH kan de status van
+ * elke order wijzigen zonder in te loggen. Voeg vóór productiegebruik RBAC
+ * toe op deze specifieke route (bv. alleen voor de rol "admin").
+ */
+
+interface RouteParams {
+  params: Promise<{ orderId: string }>;
+}
+
+export async function GET(_request: Request, { params }: RouteParams) {
+  const { orderId } = await params;
+
+  try {
+    const result = await getOrderById(orderId);
+
+    if (!result) {
+      return NextResponse.json({ error: "Bestelling niet gevonden." }, { status: 404 });
+    }
+
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof OrderServiceError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error("[api/orders/:orderId] Onverwachte fout bij ophalen order:", error);
+    return NextResponse.json({ error: "Order kon niet worden opgehaald." }, { status: 500 });
+  }
+}
+
+const updateStatusSchema = z.object({
+  status: z.enum(ORDER_STATUSES as [string, ...string[]]),
+});
+
+export async function PATCH(request: Request, { params }: RouteParams) {
+  const { orderId } = await params;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Ongeldige aanvraag." }, { status: 400 });
+  }
+
+  const parsed = updateStatusSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Ongeldige status.", issues: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const updatedOrder = await updateOrderStatus(orderId, parsed.data.status as typeof ORDER_STATUSES[number]);
+
+    if (!updatedOrder) {
+      return NextResponse.json({ error: "Bestelling niet gevonden." }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, updatedOrder });
+  } catch (error) {
+    if (error instanceof OrderServiceError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error("[api/orders/:orderId] Onverwachte fout bij bijwerken status:", error);
+    return NextResponse.json({ error: "Status kon niet worden bijgewerkt." }, { status: 500 });
+  }
+}
