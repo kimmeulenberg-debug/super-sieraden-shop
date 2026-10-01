@@ -127,12 +127,17 @@
             flex-direction: column;
             gap: 32px;
         }
-        /* 4 kaarten per pagina: 2×2 grid zowel op scherm als in print */
+        /* 2 kaarten naast elkaar (DJ Jakob) */
         .page-quad {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             min-width: 0;
+        }
+        /* MICT: 1 kaart per rij, ook op scherm */
+        .page-quad.mict-page {
+            grid-template-columns: 1fr;
+            max-width: 520px;
         }
         .no-cards {
             text-align: center; padding: 64px 0;
@@ -330,30 +335,27 @@
 
             .card-footer { padding: 4px 8px; flex-shrink: 0; }
             .card-footer-url, .card-footer-kaart { font-size: 7px; }
-        }
 
-        /* ========== MICT: 1 kaart per A4, volledige paginagrootte ========== */
-        @media print {
+            /* ---- MICT: 1 kaart per A4, volledige breedte ---- */
             .page-quad.mict-page {
                 grid-template-columns: 1fr;
                 gap: 0;
-                width: 194mm;
+                width: 100%;
+                max-width: none;
             }
-            .page-quad.mict-page .bingo-card {
-                width: 194mm;
-            }
+            .page-quad.mict-page .bingo-card { width: 100%; }
             .page-quad.mict-page .card-header { padding: 8px 14px; }
             .page-quad.mict-page .card-logo   { height: 36px; width: 36px; }
             .page-quad.mict-page .card-brand-name { font-size: 20px; }
             .page-quad.mict-page .card-num    { font-size: 12px; }
-            .page-quad.mict-page .bl { font-size: 24px; padding: 5px 0; }
+            .page-quad.mict-page .bl { font-size: 24px; padding: 6px 0; }
             .page-quad.mict-page .card-grid {
-                width: 186mm;
-                max-width: 194mm;
+                width: 100%;
+                max-width: 100%;
             }
             .page-quad.mict-page .cc-artist { font-size: 8px; }
             .page-quad.mict-page .cc-title  { font-size: 14px; }
-            .page-quad.mict-page .card-cell { padding: 3px 2px; }
+            .page-quad.mict-page .card-cell { padding: 4px 2px; }
             .page-quad.mict-page .card-cell.free.mict-free img { max-width: 80px; }
             .page-quad.mict-page .card-footer { padding: 6px 14px; }
             .page-quad.mict-page .card-footer-url,
