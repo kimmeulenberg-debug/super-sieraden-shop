@@ -338,20 +338,21 @@
 
             /* ---- MICT: 1 kaart per A4, volledige breedte ---- */
             .page-quad.mict-page {
-                grid-template-columns: 1fr;
-                gap: 0;
-                width: 100%;
-                max-width: none;
+                display: block !important;
+                width: 194mm !important;
+                max-width: none !important;
             }
-            .page-quad.mict-page .bingo-card { width: 100%; }
+            .page-quad.mict-page .bingo-card { width: 194mm !important; max-width: none !important; }
             .page-quad.mict-page .card-header { padding: 8px 14px; }
             .page-quad.mict-page .card-logo   { height: 36px; width: 36px; }
             .page-quad.mict-page .card-brand-name { font-size: 20px; }
             .page-quad.mict-page .card-num    { font-size: 12px; }
             .page-quad.mict-page .bl { font-size: 24px; padding: 6px 0; }
             .page-quad.mict-page .card-grid {
-                width: 100%;
-                max-width: 100%;
+                width: 100% !important;
+                max-width: none !important;
+                grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+                grid-template-rows: repeat(5, minmax(0, 1fr)) !important;
             }
             .page-quad.mict-page .cc-artist { font-size: 8px; }
             .page-quad.mict-page .cc-title  { font-size: 14px; }
