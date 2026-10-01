@@ -144,7 +144,7 @@ export default function EditProductPage({
             name: product.name,
             description: product.description ?? "",
             price: product.price,
-            category: (product.category as ProductFormValues["category"]) ?? "sieraden",
+            category: (product.category as ProductFormValues["category"]) ?? "oorbellen",
             image_url: product.image_url ?? "",
             sku: product.sku ?? "",
             stock_quantity: product.stock_quantity,

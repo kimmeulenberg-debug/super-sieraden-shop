@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getOrderById, updateOrderStatus, OrderServiceError, ORDER_STATUSES } from "@/lib/orders";
+import {
+  getOrderById,
+  updateOrderStatus,
+  markTikkieOrderPaid,
+  stripOrderSecrets,
+  OrderServiceError,
+  ORDER_STATUSES,
+} from "@/lib/orders";
+import { sendTikkiePaidEmail } from "@/lib/tikkie-email";
 
 /**
  * GET/PATCH voor een enkele order. Routes zijn thin: valideren, delegeren
@@ -25,7 +33,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Bestelling niet gevonden." }, { status: 404 });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, order: stripOrderSecrets(result.order) });
   } catch (error) {
     if (error instanceof OrderServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -35,9 +43,15 @@ export async function GET(_request: Request, { params }: RouteParams) {
   }
 }
 
-const updateStatusSchema = z.object({
-  status: z.enum(ORDER_STATUSES as [string, ...string[]]),
-});
+const updateStatusSchema = z
+  .object({
+    status: z.enum(ORDER_STATUSES as [string, ...string[]]).optional(),
+    // Alleen "paid" en alleen voor Tikkie-orders; Stripe/Mollie gaan via hun webhooks.
+    paymentStatus: z.literal("paid").optional(),
+  })
+  .refine((value) => value.status !== undefined || value.paymentStatus !== undefined, {
+    message: "Geef een status of paymentStatus op.",
+  });
 
 export async function PATCH(request: Request, { params }: RouteParams) {
   const { orderId } = await params;
@@ -58,13 +72,28 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   }
 
   try {
-    const updatedOrder = await updateOrderStatus(orderId, parsed.data.status as typeof ORDER_STATUSES[number]);
+    let updatedOrder = null;
+
+    if (parsed.data.paymentStatus === "paid") {
+      const existing = await getOrderById(orderId);
+      const wasAlreadyPaid = existing?.order.payment_status === "paid";
+      updatedOrder = await markTikkieOrderPaid(orderId);
+      if (updatedOrder && !wasAlreadyPaid) {
+        await sendTikkiePaidEmail({ order: updatedOrder }).catch((emailError) =>
+          console.error("[api/orders/:orderId] Betaling-ontvangen-mail mislukt:", emailError)
+        );
+      }
+    }
+
+    if (parsed.data.status) {
+      updatedOrder = await updateOrderStatus(orderId, parsed.data.status as typeof ORDER_STATUSES[number]);
+    }
 
     if (!updatedOrder) {
       return NextResponse.json({ error: "Bestelling niet gevonden." }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, updatedOrder });
+    return NextResponse.json({ success: true, updatedOrder: stripOrderSecrets(updatedOrder) });
   } catch (error) {
     if (error instanceof OrderServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

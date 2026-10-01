@@ -19,6 +19,7 @@ import {
   computeOrderTotals,
   formatPrice,
   SHIPPING_OPTIONS,
+  TIKKIE_MAX_TOTAL,
   type BillingFormValues,
 } from "@/lib/checkout";
 import { useCartStore, type CartItem } from "@/store/store";
@@ -93,9 +94,10 @@ interface CheckoutFormProps {
   totals: Totals;
   finalizeOrder: (paymentIntentId: string, paymentProvider: string) => Promise<void>;
   finalizeMollieOrder: (molliePaymentId: string) => Promise<void>;
+  finalizeTikkieOrder: (billing: BillingFormValues) => Promise<void>;
 }
 
-function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder }: CheckoutFormProps) {
+function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder, finalizeTikkieOrder }: CheckoutFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,10 +110,28 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder 
   } = form;
 
   const paymentProvider = watch("paymentProvider");
+  const tikkieAvailable = totals.total <= TIKKIE_MAX_TOTAL;
+  const stripeNotReady = paymentProvider === "stripe" && (!stripe || !elements);
 
   async function onSubmit(data: BillingFormValues) {
     setFormError(null);
     setIsSubmitting(true);
+
+    // TIKKIE FLOW: bestelling plaatsen zonder online betaling
+    if (data.paymentProvider === "tikkie") {
+      if (!tikkieAvailable) {
+        setFormError(`Betalen met Tikkie is mogelijk tot ${formatPrice(TIKKIE_MAX_TOTAL)}. Kies een andere betaalmethode.`);
+        setIsSubmitting(false);
+        return;
+      }
+      try {
+        await finalizeTikkieOrder(data);
+      } catch (error) {
+        setFormError(error instanceof Error ? error.message : "Er ging iets mis. Probeer het opnieuw.");
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     // STRIPE PAYMENT FLOW
     if (data.paymentProvider === "stripe") {
@@ -382,6 +402,29 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder 
 
             {/* Payment Provider Selector */}
             <div className="flex flex-col gap-2">
+              <label
+                className={clsx(
+                  "flex items-center gap-3 rounded border border-border-soft px-4 py-3 transition-colors duration-150 ease-in-out has-[:checked]:border-goud",
+                  tikkieAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+                )}
+              >
+                <input
+                  type="radio"
+                  value="tikkie"
+                  disabled={!tikkieAvailable}
+                  {...register("paymentProvider")}
+                  className="h-4 w-4 accent-[#c9a961]"
+                />
+                <span className="flex flex-col">
+                  <span className="text-sm font-medium text-ink">Tikkie</span>
+                  <span className="text-xs text-ink-soft">
+                    {tikkieAvailable
+                      ? "Je ontvangt na je bestelling een Tikkie van ons"
+                      : `Alleen beschikbaar tot ${formatPrice(TIKKIE_MAX_TOTAL)}`}
+                  </span>
+                </span>
+              </label>
+
               <label className="flex cursor-pointer items-center gap-3 rounded border border-border-soft px-4 py-3 transition-colors duration-150 ease-in-out has-[:checked]:border-goud">
                 <input
                   type="radio"
@@ -408,6 +451,21 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder 
                 </span>
               </label>
             </div>
+
+            {/* Tikkie uitleg */}
+            {paymentProvider === "tikkie" && (
+              <div className="rounded border border-border-soft bg-card p-4 text-sm text-ink-soft">
+                <p className="font-medium text-ink">Zo werkt betalen met Tikkie</p>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>Plaats je bestelling; je ontvangt direct een bevestiging per e-mail.</li>
+                  <li>
+                    We sturen je een Tikkie van {formatPrice(totals.total)} naar het telefoonnummer
+                    of e-mailadres dat je hebt opgegeven.
+                  </li>
+                  <li>Zodra je hebt betaald, verzenden we je bestelling.</li>
+                </ol>
+              </div>
+            )}
 
             {/* Stripe Payment Element */}
             {paymentProvider === "stripe" && (
@@ -460,10 +518,10 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder 
 
       <button
         type="submit"
-        disabled={isSubmitting || !stripe || !elements}
+        disabled={isSubmitting || stripeNotReady}
         className={clsx(
           "flex w-full cursor-pointer items-center justify-center gap-2 rounded bg-goud py-3.5 text-base font-semibold text-white transition-colors duration-200 ease-in-out hover:bg-goud-dark",
-          (isSubmitting || !stripe || !elements) && "cursor-not-allowed opacity-60"
+          (isSubmitting || stripeNotReady) && "cursor-not-allowed opacity-60"
         )}
       >
         {isSubmitting && (
@@ -472,7 +530,11 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder 
             className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
           />
         )}
-        {isSubmitting ? "Bestelling wordt geplaatst..." : "Bestelling plaatsen"}
+        {isSubmitting
+          ? "Bestelling wordt geplaatst..."
+          : paymentProvider === "tikkie"
+            ? "Bestelling plaatsen (betalen met Tikkie)"
+            : "Bestelling plaatsen"}
       </button>
     </form>
   );
@@ -513,7 +575,7 @@ function CheckoutPageContent() {
       postalCode: "",
       country: "Nederland",
       shippingOption: "standard",
-      paymentProvider: "stripe",
+      paymentProvider: "tikkie",
       molliePaymentMethod: "ideal",
     },
   });
@@ -521,6 +583,34 @@ function CheckoutPageContent() {
   const shippingOption = form.watch("shippingOption");
   const totals = computeOrderTotals(items, shippingOption);
   const amountInCents = Math.max(Math.round(totals.total * 100), 0);
+
+  // Valt de winkelmand boven het Tikkie-maximum uit, schakel dan over naar Stripe.
+  const selectedProvider = form.watch("paymentProvider");
+  useEffect(() => {
+    if (selectedProvider === "tikkie" && totals.total > TIKKIE_MAX_TOTAL) {
+      form.setValue("paymentProvider", "stripe");
+    }
+  }, [selectedProvider, totals.total, form]);
+
+  async function finalizeTikkieOrder(billing: BillingFormValues) {
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: items.map(({ id, name, price, quantity }) => ({ id, name, price, quantity })),
+        billing,
+        paymentProvider: "tikkie",
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.orderId) {
+      throw new Error(data.error ?? "De bestelling kon niet worden opgeslagen.");
+    }
+
+    clearCart();
+    router.push(`/order-confirmation/${data.orderId}`);
+  }
 
   async function finalizeOrder(paymentIntentId: string, paymentProvider: string) {
     try {
@@ -689,7 +779,7 @@ function CheckoutPageContent() {
           options={{ mode: "payment", amount: amountInCents || 100, currency: "eur" }}
         >
           <AmountSync amountInCents={amountInCents} />
-          <CheckoutForm form={form} items={items} totals={totals} finalizeOrder={finalizeOrder} finalizeMollieOrder={finalizeMollieOrder} />
+          <CheckoutForm form={form} items={items} totals={totals} finalizeOrder={finalizeOrder} finalizeMollieOrder={finalizeMollieOrder} finalizeTikkieOrder={finalizeTikkieOrder} />
         </Elements>
       </div>
     </div>

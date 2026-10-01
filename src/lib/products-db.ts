@@ -54,7 +54,7 @@ export const productFormSchema = z.object({
   name: z.string().trim().min(1, "Productnaam is verplicht"),
   description: z.string().trim().max(2000, "Beschrijving is te lang (max. 2000 tekens)").default(""),
   price: z.coerce.number().positive("Prijs moet groter dan € 0 zijn"),
-  category: z.enum(PRODUCT_CATEGORIES).default("sieraden"),
+  category: z.enum(PRODUCT_CATEGORIES).default("oorbellen"),
   image_url: z
     .string()
     .trim()

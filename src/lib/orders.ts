@@ -1,5 +1,12 @@
 import { getSupabaseAdmin } from "@/lib/db";
-import { computeOrderTotals, type BillingFormValues, type CartItemInput } from "@/lib/checkout";
+import { getStripeServer } from "@/lib/stripe-server";
+import { randomBytes } from "node:crypto";
+import {
+  computeOrderTotals,
+  TIKKIE_MAX_TOTAL,
+  type BillingFormValues,
+  type CartItemInput,
+} from "@/lib/checkout";
 
 /**
  * Order Management: gedeelde types en databasefuncties.
@@ -12,7 +19,7 @@ import { computeOrderTotals, type BillingFormValues, type CartItemInput } from "
 
 export type OrderStatus = "pending" | "shipped" | "delivered" | "cancelled";
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
-export type PaymentProvider = "stripe" | "mollie";
+export type PaymentProvider = "stripe" | "mollie" | "tikkie";
 
 export const ORDER_STATUSES: OrderStatus[] = ["pending", "shipped", "delivered", "cancelled"];
 
@@ -36,6 +43,8 @@ export interface OrderRecord {
   stripe_payment_id: string | null;
   mollie_payment_id: string | null;
   payment_provider: PaymentProvider;
+  tikkie_confirm_token: string | null;
+  tikkie_confirmed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +58,15 @@ export interface OrderItemRecord {
   quantity: number;
   total: number;
   created_at: string;
+}
+
+/** Orderrecord zonder geheime velden; gebruik dit voor alles wat naar de browser gaat. */
+export type PublicOrderRecord = Omit<OrderRecord, "tikkie_confirm_token">;
+
+export function stripOrderSecrets(order: OrderRecord): PublicOrderRecord {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { tikkie_confirm_token, ...publicOrder } = order;
+  return publicOrder;
 }
 
 export class OrderServiceError extends Error {
@@ -74,6 +92,36 @@ function isValidCartItems(items: unknown): items is CartItemInput[] {
         item.quantity > 0
     )
   );
+}
+
+/**
+ * Controleert bij Stripe zelf dat deze betaling echt is gelukt en precies het
+ * orderbedrag betreft. Zonder deze controle kan iedereen met een verzonnen
+ * paymentIntentId een order als "betaald" laten opslaan.
+ */
+async function assertStripePaymentSucceeded(paymentIntentId: string, totalEuro: number): Promise<void> {
+  const stripe = getStripeServer();
+  if (!stripe) {
+    throw new OrderServiceError("Betaling controleren is niet beschikbaar: STRIPE_SECRET_KEY ontbreekt.", 503);
+  }
+
+  let paymentIntent;
+  try {
+    paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  } catch (error) {
+    console.error("[lib/orders] Kon Stripe PaymentIntent niet ophalen:", error);
+    throw new OrderServiceError("De betaling kon niet worden geverifieerd.", 400);
+  }
+
+  if (paymentIntent.status !== "succeeded") {
+    throw new OrderServiceError("De betaling is niet voltooid.", 402);
+  }
+  if (paymentIntent.currency !== "eur" || paymentIntent.amount !== Math.round(totalEuro * 100)) {
+    console.error(
+      `[lib/orders] Bedrag komt niet overeen: betaald ${paymentIntent.amount} ${paymentIntent.currency}, order ${Math.round(totalEuro * 100)} eur (${paymentIntentId})`
+    );
+    throw new OrderServiceError("Het betaalde bedrag komt niet overeen met de bestelling.", 400);
+  }
 }
 
 export interface CreateOrderInput {
@@ -112,6 +160,45 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const { billing } = input;
   const { subtotal, tax, shipping, total } = computeOrderTotals(input.items, billing.shippingOption);
   const orderNumber = `ORD-${Date.now()}`;
+  const paymentProvider = input.paymentProvider ?? "stripe";
+
+  if (paymentProvider === "tikkie" && total > TIKKIE_MAX_TOTAL) {
+    throw new OrderServiceError(
+      `Betalen met Tikkie is mogelijk tot € ${TIKKIE_MAX_TOTAL}. Kies een andere betaalmethode.`,
+      400
+    );
+  }
+  const tikkieConfirmToken = paymentProvider === "tikkie" ? randomBytes(24).toString("hex") : null;
+
+  // Betaal-ID's worden alleen gebruikt voor de provider waar ze bij horen; een
+  // meegestuurd ID bij Tikkie mag een order nooit als "betaald" markeren.
+  let paymentStatus: PaymentStatus = "pending";
+  let stripePaymentId: string | null = null;
+  let molliePaymentId: string | null = null;
+
+  if (paymentProvider === "stripe") {
+    if (!input.paymentIntentId) {
+      throw new OrderServiceError("Betaling ontbreekt voor deze bestelling.", 400);
+    }
+
+    // Idempotent: dezelfde betaling (bv. pagina opnieuw geladen) levert dezelfde order op.
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("stripe_payment_id", input.paymentIntentId)
+      .maybeSingle<{ id: string }>();
+    if (existing) {
+      const found = await getOrderById(existing.id);
+      if (found) return found;
+    }
+
+    await assertStripePaymentSucceeded(input.paymentIntentId, total);
+    paymentStatus = "paid";
+    stripePaymentId = input.paymentIntentId;
+  } else if (paymentProvider === "mollie") {
+    molliePaymentId = input.molliePaymentId ?? null;
+    paymentStatus = molliePaymentId ? "paid" : "pending";
+  }
 
   const { data: orderRow, error: orderError } = await supabase
     .from("orders")
@@ -130,10 +217,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       total,
       shipping_method: billing.shippingOption,
       status: "pending",
-      payment_status: input.paymentIntentId || input.molliePaymentId ? "paid" : "pending",
-      stripe_payment_id: input.paymentIntentId ?? null,
-      mollie_payment_id: input.molliePaymentId ?? null,
-      payment_provider: input.paymentProvider ?? "stripe",
+      payment_status: paymentStatus,
+      stripe_payment_id: stripePaymentId,
+      mollie_payment_id: molliePaymentId,
+      payment_provider: paymentProvider,
+      ...(tikkieConfirmToken ? { tikkie_confirm_token: tikkieConfirmToken } : {}),
     })
     .select()
     .single<OrderRecord>();
@@ -290,5 +378,90 @@ export async function updateOrderStatus(
     throw new OrderServiceError("Orderstatus kon niet worden bijgewerkt.", 500);
   }
 
+  return data;
+}
+
+/**
+ * Klant meldt via de link in de mail dat de Tikkie is betaald. Dit zet alleen
+ * een tijdstempel; payment_status blijft 'pending' tot de eigenaar de betaling
+ * heeft gecontroleerd. Retourneert `null` bij een onbekende token.
+ */
+export async function confirmTikkieByToken(
+  token: string
+): Promise<{ order: OrderRecord; alreadyConfirmed: boolean } | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new OrderServiceError("Bevestigen is niet beschikbaar: Supabase is niet geconfigureerd.", 503);
+  }
+
+  const { data: order, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("tikkie_confirm_token", token)
+    .eq("payment_provider", "tikkie")
+    .maybeSingle<OrderRecord>();
+
+  if (error) {
+    console.error("[lib/orders] Kon order niet ophalen via Tikkie-token:", error);
+    throw new OrderServiceError("Bevestigen is mislukt.", 500);
+  }
+  if (!order) return null;
+
+  if (order.tikkie_confirmed_at || order.payment_status === "paid") {
+    return { order, alreadyConfirmed: true };
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("orders")
+    .update({ tikkie_confirmed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", order.id)
+    .select()
+    .single<OrderRecord>();
+
+  if (updateError || !updated) {
+    console.error("[lib/orders] Kon Tikkie-bevestiging niet opslaan:", updateError);
+    throw new OrderServiceError("Bevestigen is mislukt.", 500);
+  }
+
+  return { order: updated, alreadyConfirmed: false };
+}
+
+/**
+ * Markeer een Tikkie-order als betaald (alleen door de eigenaar via /admin).
+ * Stripe- en Mollie-orders worden uitsluitend door hun webhooks bijgewerkt,
+ * dus voor die providers wordt hier een 409 gegeven.
+ */
+export async function markTikkieOrderPaid(orderId: string): Promise<OrderRecord | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new OrderServiceError("Betaalstatus bijwerken is niet beschikbaar: Supabase is niet geconfigureerd.", 503);
+  }
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle<OrderRecord>();
+
+  if (fetchError) {
+    console.error("[lib/orders] Kon order niet ophalen:", fetchError);
+    throw new OrderServiceError("Order kon niet worden opgehaald.", 500);
+  }
+  if (!existing) return null;
+  if (existing.payment_provider !== "tikkie") {
+    throw new OrderServiceError("Alleen Tikkie-bestellingen kunnen handmatig als betaald worden gemarkeerd.", 409);
+  }
+
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ payment_status: "paid", updated_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .select()
+    .single<OrderRecord>();
+
+  if (error || !data) {
+    console.error("[lib/orders] Kon betaalstatus niet bijwerken:", error);
+    throw new OrderServiceError("Betaalstatus kon niet worden bijgewerkt.", 500);
+  }
   return data;
 }

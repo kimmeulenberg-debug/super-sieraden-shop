@@ -50,6 +50,9 @@ export function computeOrderTotals(items: CartItemInput[], shippingOptionId: str
   return { subtotal, tax, shipping, total };
 }
 
+// Tikkie is alleen beschikbaar tot dit totaalbedrag (incl. btw en verzending).
+export const TIKKIE_MAX_TOTAL = 300;
+
 export function formatPrice(price: number) {
   return `€ ${price.toFixed(2).replace(".", ",")}`;
 }
@@ -77,7 +80,7 @@ export const billingSchema = z.object({
     .regex(NL_POSTAL_CODE_REGEX, "Ongeldige postcode (bijv. 1234 AB)"),
   country: z.string().trim().min(1, "Land is verplicht"),
   shippingOption: z.enum(["standard", "express"]),
-  paymentProvider: z.enum(["stripe", "mollie"]).default("stripe"),
+  paymentProvider: z.enum(["tikkie", "stripe", "mollie"]),
   molliePaymentMethod: z.enum(["ideal", "wero"]).optional(),
 });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { OrderRecord } from '@/lib/orders';
@@ -19,7 +19,7 @@ const PAYMENT_LABELS: Record<string, { label: string; color: string; bgColor: st
   refunded: { label: 'Terugbetaald', color: 'text-gray-600', bgColor: 'bg-gray-50' },
 };
 
-export default function AdminOrdersPage() {
+function AdminOrdersContent() {
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,5 +209,13 @@ export default function AdminOrdersPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function AdminOrdersPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-600">Bestellingen laden...</div>}>
+      <AdminOrdersContent />
+    </Suspense>
   );
 }

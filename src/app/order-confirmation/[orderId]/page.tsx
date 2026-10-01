@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { estimatedDeliveryDate, formatPrice } from "@/lib/checkout";
-import type { OrderRecord, OrderItemRecord } from "@/lib/orders";
+import type { PublicOrderRecord as OrderRecord, OrderItemRecord } from "@/lib/orders";
 
 function CheckIcon() {
   return (
@@ -123,6 +123,17 @@ export default function OrderConfirmationPage({
       <p className="mt-2 text-sm text-ink-soft">
         Bestelnummer: <span className="font-semibold text-ink">{order.order_number}</span>
       </p>
+
+      {order.payment_provider === "tikkie" && order.payment_status !== "paid" && (
+        <div className="mt-6 rounded border border-goud bg-card p-5 text-left text-sm text-ink">
+          <p className="font-medium">Nog te betalen: {formatPrice(order.total)} via Tikkie</p>
+          <p className="mt-1 text-ink-soft">
+            We sturen je zo snel mogelijk een Tikkie. Je ontvangt ook een bevestiging per e-mail
+            op {order.customer_email}. Zodra we je betaling hebben ontvangen, verzenden we je
+            bestelling.
+          </p>
+        </div>
+      )}
 
       <div className="mt-8 rounded border border-border-soft bg-card p-6 text-left">
         <ul className="flex flex-col gap-3">

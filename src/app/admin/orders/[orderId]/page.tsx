@@ -38,6 +38,7 @@ export default function AdminOrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState<string>('');
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -80,6 +81,29 @@ export default function AdminOrderDetailPage() {
       setError(err instanceof Error ? err.message : 'Failed to update');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleMarkPaid = async () => {
+    if (!order) return;
+    if (!window.confirm(`Bevestig dat je de betaling van €${order.total.toFixed(2)} hebt ontvangen. De klant krijgt hiervan een e-mail.`)) return;
+
+    try {
+      setMarkingPaid(true);
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentStatus: 'paid' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Markeren als betaald mislukt');
+
+      setOrder(data.updatedOrder);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Markeren als betaald mislukt');
+    } finally {
+      setMarkingPaid(false);
     }
   };
 
@@ -210,9 +234,45 @@ export default function AdminOrderDetailPage() {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">Betaalreferentie</h3>
-              <p className="text-xs font-mono text-gray-600">{order.stripe_payment_id || 'N/A'}</p>
+              <p className="text-xs font-mono text-gray-600">
+                {order.payment_provider === 'tikkie'
+                  ? `Tikkie (handmatig) - omschrijving: Super Sieraden Shop ${order.order_number}`
+                  : order.payment_provider === 'mollie'
+                    ? order.mollie_payment_id || 'N/A'
+                    : order.stripe_payment_id || 'N/A'}
+              </p>
             </div>
           </div>
+
+          {order.payment_provider === 'tikkie' && (
+            <div className="mb-8 p-4 rounded-lg border border-[#C9A961] bg-[#fff8e6]">
+              <h3 className="font-semibold text-gray-900 mb-2">Tikkie-betaling</h3>
+              {order.payment_status === 'paid' ? (
+                <p className="text-green-700">Betaling ontvangen en gemarkeerd als betaald.</p>
+              ) : (
+                <>
+                  <p className="text-gray-700">
+                    Stuur een Tikkie van <strong>€{order.total.toFixed(2)}</strong> naar{' '}
+                    <strong>{order.customer_name}</strong>
+                    {order.customer_phone ? <> ({order.customer_phone})</> : null}, omschrijving{' '}
+                    <strong>Super Sieraden Shop {order.order_number}</strong>.
+                  </p>
+                  <p className="mt-2 text-sm text-gray-600">
+                    {order.tikkie_confirmed_at
+                      ? `De klant meldt op ${new Date(order.tikkie_confirmed_at).toLocaleString('nl-NL')} dat de Tikkie is betaald. Controleer eerst in je bank- of Tikkie-app of het bedrag binnen is.`
+                      : 'De klant heeft nog niet gemeld dat de Tikkie is betaald.'}
+                  </p>
+                  <button
+                    onClick={handleMarkPaid}
+                    disabled={markingPaid}
+                    className="mt-4 px-6 py-2 bg-[#C9A961] text-white font-medium rounded-lg hover:bg-[#B39450] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {markingPaid ? 'Bezig...' : 'Markeer als betaald'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Status Update */}
           <div className="border-t pt-6">

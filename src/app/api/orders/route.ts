@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { billingSchema, type CartItemInput } from "@/lib/checkout";
-import { createOrder, getOrders, OrderServiceError, ORDER_STATUSES, type OrderStatus } from "@/lib/orders";
+import {
+  createOrder,
+  getOrders,
+  OrderServiceError,
+  ORDER_STATUSES,
+  stripOrderSecrets,
+  type OrderStatus,
+} from "@/lib/orders";
+import { sendTikkieOrderEmails } from "@/lib/tikkie-email";
+import { getSiteUrl } from "@/lib/site-url";
 
 /**
  * Route is thin: valideert de aanvraag, delegeert naar src/lib/orders.ts en
@@ -11,7 +20,7 @@ interface CreateOrderRequestBody {
   billing: unknown;
   paymentIntentId?: string;
   molliePaymentId?: string;
-  paymentProvider?: "stripe" | "mollie";
+  paymentProvider?: "stripe" | "mollie" | "tikkie";
 }
 
 export async function POST(request: Request) {
@@ -38,19 +47,34 @@ export async function POST(request: Request) {
     );
   }
 
+  // De betaalprovider staat in de billing-gegevens; een afwijkend veld op het
+  // bovenste niveau wijst op een gemanipuleerd verzoek.
+  const paymentProvider = billingResult.data.paymentProvider;
+  if (body.paymentProvider && body.paymentProvider !== paymentProvider) {
+    return NextResponse.json({ error: "Ongeldige aanvraag." }, { status: 400 });
+  }
+
   try {
     const { order, items: orderItems } = await createOrder({
       items,
       billing: billingResult.data,
       paymentIntentId: body.paymentIntentId,
       molliePaymentId: body.molliePaymentId,
-      paymentProvider: body.paymentProvider,
+      paymentProvider,
     });
+
+    if (order.payment_provider === "tikkie") {
+      try {
+        await sendTikkieOrderEmails({ order, items: orderItems, siteUrl: getSiteUrl(request) });
+      } catch (emailError) {
+        console.error("[api/orders] Tikkie-mails versturen mislukt (order is wel opgeslagen):", emailError);
+      }
+    }
 
     return NextResponse.json({
       orderId: order.id,
       orderNumber: order.order_number,
-      order,
+      order: stripOrderSecrets(order),
       items: orderItems,
     });
   } catch (error) {
@@ -90,7 +114,7 @@ export async function GET(request: Request) {
 
   try {
     const result = await getOrders({ status, dateFrom, dateTo, page, pageSize });
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, orders: result.orders.map(stripOrderSecrets) });
   } catch (error) {
     if (error instanceof OrderServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

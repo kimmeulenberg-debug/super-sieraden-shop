@@ -17,11 +17,11 @@ import {
  */
 
 const CATEGORY_LABELS: Record<(typeof PRODUCT_CATEGORIES)[number], string> = {
-  sieraden: "Sieraden (algemeen)",
-  armbanden: "Armbanden",
   oorbellen: "Oorbellen",
+  ringen: "Ringen",
   kettingen: "Kettingen",
-  horloges: "Horloges",
+  armbandjes: "Armbandjes",
+  aanbiedingen: "Aanbiedingen",
 };
 
 interface ProductFormProps {
@@ -36,7 +36,7 @@ const EMPTY_DEFAULTS: ProductFormValues = {
   name: "",
   description: "",
   price: 0,
-  category: "sieraden",
+  category: "oorbellen",
   image_url: "",
   sku: "",
   stock_quantity: 0,

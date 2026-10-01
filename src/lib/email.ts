@@ -282,3 +282,58 @@ function generateOrderConfirmationHTML(
     </html>
   `;
 }
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Verstuurt een e-mail via Resend (RESEND_API_KEY). Zonder API-key wordt de
+ * mail alleen gelogd, zodat lokaal ontwikkelen zonder mailaccount blijft werken.
+ * Gooit nooit: mailfouten mogen een bestelling niet laten mislukken.
+ */
+export async function sendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+  replyTo?: string;
+}): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM || 'Super Sieraden Shop <onboarding@resend.dev>';
+
+  if (!apiKey) {
+    console.log(`[EMAIL] (RESEND_API_KEY ontbreekt, niet verzonden) aan ${params.to}: ${params.subject}`);
+    return false;
+  }
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        from,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+        ...(params.replyTo ? { reply_to: params.replyTo } : {}),
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[EMAIL] Resend gaf ${response.status} voor "${params.subject}":`, await response.text());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('[EMAIL] Versturen mislukt:', error);
+    return false;
+  }
+}
