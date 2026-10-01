@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingo Kaarten Printen — DJ Jakob</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body { font-family: 'Inter', sans-serif; background: #0A0A1A; color: #FDFAF5; }
+
+        :root {
+            --cyan:   #00D4FF;
+            --pink:   #FF0066;
+            --orange: #FF8C00;
+            --dark:   #0A0A1A;
+            --mid:    #12122A;
+            --card:   #16162E;
+            --white:  #FDFAF5;
+            --muted:  rgba(253,250,245,0.55);
+            --border: rgba(0,212,255,0.10);
+        }
+
+        /* ========== PIN SCREEN ========== */
+        #pin-screen {
+            position: fixed; inset: 0; z-index: 200;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            background: var(--dark);
+        }
+        .pin-logo {
+            width: 72px; height: 72px; object-fit: contain; border-radius: 50%;
+            filter: drop-shadow(0 0 12px rgba(255,140,0,0.55)) drop-shadow(0 0 24px rgba(0,212,255,0.35));
+            margin-bottom: 24px;
+        }
+        .pin-title { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 0.08em; color: var(--white); margin-bottom: 6px; }
+        .pin-sub { font-size: 13px; color: var(--muted); margin-bottom: 32px; }
+        .pin-dots { display: flex; gap: 14px; margin-bottom: 10px; }
+        .pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(0,212,255,0.4); transition: background 150ms ease; }
+        .pin-dot.filled { background: var(--cyan); border-color: var(--cyan); }
+        .pin-error { font-size: 12px; color: var(--pink); min-height: 18px; margin-bottom: 24px; text-align: center; }
+        .numpad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+        .numpad-btn {
+            height: 72px; background: var(--card); border: 1px solid var(--border);
+            border-radius: 4px; color: var(--white);
+            font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 0.04em;
+            cursor: pointer; transition: background 150ms ease, border-color 150ms ease;
+        }
+        .numpad-btn:hover { background: rgba(0,212,255,0.10); border-color: rgba(0,212,255,0.35); }
+        .numpad-btn:active { transform: scale(0.94); }
+        .numpad-btn.empty { background: transparent; border-color: transparent; cursor: default; }
+        .numpad-btn.del { font-size: 20px; }
+
+        /* ========== APP HEADER ========== */
+        #app { display: none; min-height: 100vh; }
+
+        .app-header {
+            background: rgba(10,10,26,0.96);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 50;
+        }
+        .app-brand { display: flex; align-items: center; gap: 12px; }
+        .app-brand img { height: 40px; width: 40px; object-fit: contain; border-radius: 50%; filter: drop-shadow(0 0 6px rgba(255,140,0,0.45)); }
+        .app-brand-name { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.06em; color: var(--cyan); }
+        .app-brand-sub { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+        .btn-logout-app {
+            background: none; border: 1px solid rgba(255,255,255,0.12); color: var(--muted);
+            padding: 8px 16px; border-radius: 3px; font-size: 12px; font-weight: 600;
+            letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 200ms ease;
+        }
+        .btn-logout-app:hover { border-color: var(--pink); color: var(--pink); }
+
+        /* ========== CONTROLS ========== */
+        .controls-bar {
+            max-width: 860px; margin: 40px auto 32px;
+            padding: 0 32px;
+            display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+        }
+        .ctrl-group { display: flex; flex-direction: column; gap: 8px; }
+        .ctrl-label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+        .ctrl-select {
+            background: var(--card); border: 1px solid var(--border); color: var(--white);
+            padding: 12px 16px; border-radius: 3px; font-family: 'Inter', sans-serif;
+            font-size: 14px; cursor: pointer; min-width: 140px; outline: none;
+            transition: border-color 200ms ease;
+        }
+        .ctrl-select:focus { border-color: rgba(0,212,255,0.45); }
+        .btn-genereer {
+            background: var(--cyan); color: var(--dark); border: none;
+            padding: 13px 32px; font-family: 'Inter', sans-serif;
+            font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+            cursor: pointer; border-radius: 3px;
+            box-shadow: 0 0 24px rgba(0,212,255,0.3);
+            transition: all 200ms ease; white-space: nowrap;
+        }
+        .btn-genereer:hover { background: #00bce0; box-shadow: 0 0 40px rgba(0,212,255,0.5); transform: translateY(-2px); }
+        .btn-genereer:disabled { background: rgba(0,212,255,0.2); box-shadow: none; cursor: default; transform: none; color: rgba(10,10,26,0.4); }
+        .btn-print {
+            background: var(--pink); color: var(--white); border: none;
+            padding: 13px 32px; font-family: 'Inter', sans-serif;
+            font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+            cursor: pointer; border-radius: 3px;
+            box-shadow: 0 0 24px rgba(255,0,102,0.3);
+            transition: all 200ms ease; white-space: nowrap;
+        }
+        .btn-print:hover { background: #cc0052; box-shadow: 0 0 40px rgba(255,0,102,0.5); transform: translateY(-2px); }
+        .btn-print:disabled { background: rgba(255,0,102,0.2); box-shadow: none; cursor: default; transform: none; }
+        .songs-info { font-size: 12px; color: var(--muted); align-self: center; }
+        .songs-info strong { color: var(--white); }
+
+        /* ========== PREVIEW AREA ========== */
+        .preview-area {
+            max-width: 860px; margin: 0 auto 64px;
+            padding: 0 32px;
+        }
+        .preview-label {
+            font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
+            text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+        }
+        .preview-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+        /* 2 kaarten naast elkaar (DJ Jakob) */
+        .page-quad {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            min-width: 0;
+        }
+        /* MICT: 1 kaart per rij, ook op scherm */
+        .page-quad.mict-page {
+            grid-template-columns: 1fr;
+            max-width: 520px;
+        }
+        .no-cards {
+            text-align: center; padding: 64px 0;
+            font-size: 14px; color: rgba(253,250,245,0.2);
+        }
+
+        /* ========== BINGO CARD ========== */
+        .bingo-card {
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            color: #111;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+            /* Voorkom dat de kaart breder wordt dan zijn grid-kolom */
+            min-width: 0;
+            width: 100%;
+        }
+        .card-header {
+            background: #111;
+            padding: 10px 14px 8px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-logo { height: 32px; width: 32px; object-fit: contain; border-radius: 50%; }
+        .card-brand-name { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.06em; color: #00D4FF; }
+        .card-num { font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: 0.1em; text-transform: uppercase; }
+
+        .bingo-letters {
+            display: grid; grid-template-columns: repeat(5,1fr);
+            background: #0A0A1A;
+        }
+        .bl {
+            text-align: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 22px; letter-spacing: 0.04em;
+            padding: 6px 0;
+        }
+        .bl:nth-child(1) { color: #00D4FF; }
+        .bl:nth-child(2) { color: #FF0066; }
+        .bl:nth-child(3) { color: #FF8C00; }
+        .bl:nth-child(4) { color: #9B59FF; }
+        .bl:nth-child(5) { color: #00E676; }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(5,1fr);
+            gap: 2px;
+            padding: 2px;
+            background: #ddd;
+            /* Voorkom dat de grid breder wordt dan de kaart */
+            min-width: 0;
+            overflow: hidden;
+        }
+        .card-cell {
+            background: #fff;
+            aspect-ratio: 1;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center; padding: 3px 2px;
+            position: relative;
+            /* Voorkom dat lange tekst de cel breder maakt dan de kolom */
+            min-width: 0;
+            overflow: hidden;
+        }
+        .card-cell.free {
+            background: #0A0A1A;
+        }
+        .card-cell.free::after {
+            content: '★';
+            font-size: 20px; color: #FF0066;
+        }
+        .card-cell.free.mict-free {
+            background: #e8f6f6;
+        }
+        .card-cell.free.mict-free::after { content: none; }
+        .card-cell.free.mict-free img {
+            width: 70%; max-width: 54px; height: auto; display: block;
+        }
+        .cc-artist {
+            font-size: 6px; color: #888;
+            letter-spacing: 0.04em; text-transform: uppercase;
+            line-height: 1.2; margin-bottom: 2px;
+            overflow-wrap: break-word; word-break: break-word;
+            max-width: 100%;
+        }
+        .cc-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 10px; letter-spacing: 0.02em;
+            color: #111; line-height: 1.15;
+            overflow-wrap: break-word; word-break: break-word;
+            max-width: 100%;
+        }
+
+        .card-footer {
+            background: #f5f5f5;
+            padding: 6px 14px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-top: 1px solid #e0e0e0;
+        }
+        .card-footer-url { font-size: 9px; color: #888; letter-spacing: 0.04em; }
+        .card-footer-kaart { font-size: 9px; color: #bbb; }
+
+        /* ========== PRINT ========== */
+        @media print {
+            @page { size: A4 portrait; margin: 8mm; }
+
+            *, *::before, *::after { box-sizing: border-box; }
+            html, body { margin: 0 !important; padding: 0 !important; }
+            body { background: #fff !important; color: #000 !important; }
+
+            #pin-screen { display: none !important; }
+            #app { display: block !important; margin: 0; padding: 0; }
+            .app-header { display: none !important; }
+            .controls-bar { display: none !important; }
+            .preview-label { display: none !important; }
+            .preview-area { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+
+            /*
+             * display:block zodat page-break-after:always op de kinderen werkt.
+             * Als preview-grid flex is, blokkeert dat paginawissels in Safari/Chrome.
+             */
+            .preview-grid { display: block !important; margin: 0; padding: 0; }
+
+            /*
+             * Geen expliciete hoogte op de quad — kaarten bepalen hun eigen hoogte (~228mm).
+             * Dat past ruim op een A4 (281mm). page-break-after:always dwingt een nieuwe pagina.
+             */
+            .page-quad {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 5mm;
+                align-items: start;
+                width: 194mm;
+                margin: 0;
+                padding: 0;
+                page-break-after: always;
+                break-after: page;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .page-quad:last-child {
+                page-break-after: auto;
+                break-after: auto;
+            }
+
+            /* Kaart: geen expliciete hoogte, groeit mee met inhoud */
+            .bingo-card {
+                box-shadow: none;
+                border: 1px solid #aaa;
+                border-radius: 3px;
+                overflow: hidden;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
+            .card-header { padding: 5px 8px; flex-shrink: 0; }
+            .card-logo   { height: 18px; width: 18px; }
+            .card-brand-name { font-size: 12px; }
+            .card-num    { font-size: 7px; }
+
+            .bingo-letters { flex-shrink: 0; }
+            .bl { font-size: 14px; padding: 3px 0; }
+
+            /*
+             * Kaartgrid: aspect-ratio:1 maakt het grid vierkant.
+             * Borders op cellen i.p.v. background+gap — browsers drukken borders
+             * altijd af, ook als "Achtergronden afdrukken" uitstaat.
+             */
+            .card-grid {
+                flex-shrink: 0;
+                width: 110mm;
+                max-width: 100%;
+                margin: 0 auto;
+                aspect-ratio: 1;
+                gap: 0;
+                padding: 0;
+                background: transparent;
+                border: 1.5px solid #444;
+                overflow: hidden;
+                grid-auto-rows: 1fr;
+                min-width: 0;
+            }
+            .card-cell {
+                aspect-ratio: unset !important;
+                min-height: 0;
+                min-width: 0;
+                overflow: hidden;
+                padding: 2px 1px;
+                border: 1px solid #666;
+            }
+            .cc-artist { font-size: 5px; }
+            .cc-title  { font-size: 8px; }
+
+            .card-footer { padding: 4px 8px; flex-shrink: 0; }
+            .card-footer-url, .card-footer-kaart { font-size: 7px; }
+
+            /* ---- MICT: 1 kaart per A4, volledige breedte ---- */
+            .page-quad.mict-page {
+                display: block !important;
+                width: 194mm !important;
+                max-width: none !important;
+            }
+            .page-quad.mict-page .bingo-card { width: 194mm !important; max-width: none !important; }
+            .page-quad.mict-page .card-header { padding: 8px 14px; }
+            .page-quad.mict-page .card-logo   { height: 36px; width: 36px; }
+            .page-quad.mict-page .card-brand-name { font-size: 20px; }
+            .page-quad.mict-page .card-num    { font-size: 12px; }
+            .page-quad.mict-page .bl { font-size: 24px; padding: 6px 0; }
+            .page-quad.mict-page .card-grid {
+                width: 100% !important;
+                max-width: none !important;
+                grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+                grid-template-rows: repeat(5, minmax(0, 1fr)) !important;
+            }
+            .page-quad.mict-page .cc-artist { font-size: 8px; }
+            .page-quad.mict-page .cc-title  { font-size: 14px; }
+            .page-quad.mict-page .card-cell { padding: 4px 2px; }
+            .page-quad.mict-page .card-cell.free.mict-free img { max-width: 80px; }
+            .page-quad.mict-page .card-footer { padding: 6px 14px; }
+            .page-quad.mict-page .card-footer-url,
+            .page-quad.mict-page .card-footer-kaart { font-size: 10px; }
+        }
+
+        @media (max-width: 600px) {
+            .controls-bar { flex-direction: column; align-items: stretch; }
+            .page-quad { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen">
+    <img src="./dj-jakob-logo-new.PNG" alt="DJ Jakob" class="pin-logo">
+    <h1 class="pin-title">Bingo Kaarten</h1>
+    <p class="pin-sub">Voer je pincode in</p>
+    <div class="pin-dots">
+        <div class="pin-dot" id="dot-0"></div>
+        <div class="pin-dot" id="dot-1"></div>
+        <div class="pin-dot" id="dot-2"></div>
+        <div class="pin-dot" id="dot-3"></div>
+    </div>
+    <p class="pin-error" id="pin-error">&nbsp;</p>
+    <div class="numpad">
+        <button class="numpad-btn" onclick="addDigit('1')">1</button>
+        <button class="numpad-btn" onclick="addDigit('2')">2</button>
+        <button class="numpad-btn" onclick="addDigit('3')">3</button>
+        <button class="numpad-btn" onclick="addDigit('4')">4</button>
+        <button class="numpad-btn" onclick="addDigit('5')">5</button>
+        <button class="numpad-btn" onclick="addDigit('6')">6</button>
+        <button class="numpad-btn" onclick="addDigit('7')">7</button>
+        <button class="numpad-btn" onclick="addDigit('8')">8</button>
+        <button class="numpad-btn" onclick="addDigit('9')">9</button>
+        <button class="numpad-btn empty"></button>
+        <button class="numpad-btn" onclick="addDigit('0')">0</button>
+        <button class="numpad-btn del" onclick="deleteDigit()">⌫</button>
+    </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+    <header class="app-header">
+        <div class="app-brand">
+            <img src="./dj-jakob-logo-new.PNG" alt="DJ Jakob">
+            <div>
+                <div class="app-brand-name">DJ Jakob</div>
+                <div class="app-brand-sub">Bingo Kaarten Printen</div>
+            </div>
+        </div>
+        <button class="btn-logout-app" onclick="logout()">Uitloggen</button>
+    </header>
+
+    <div class="controls-bar">
+        <div class="ctrl-group">
+            <label class="ctrl-label" for="sjabloon-select">Sjabloon</label>
+            <select class="ctrl-select" id="sjabloon-select">
+                <option value="djjakob">DJ Jakob</option>
+                <option value="mict">MICT</option>
+            </select>
+        </div>
+        <div class="ctrl-group">
+            <label class="ctrl-label" for="aantal-select">Aantal kaarten</label>
+            <select class="ctrl-select" id="aantal-select">
+                <option value="4">4 kaarten</option>
+                <option value="8">8 kaarten</option>
+                <option value="12">12 kaarten</option>
+                <option value="16">16 kaarten</option>
+                <option value="20">20 kaarten</option>
+                <option value="24">24 kaarten</option>
+                <option value="30">30 kaarten</option>
+                <option value="35">35 kaarten</option>
+                <option value="40">40 kaarten</option>
+                <option value="45">45 kaarten</option>
+                <option value="50">50 kaarten</option>
+                <option value="55">55 kaarten</option>
+                <option value="60">60 kaarten</option>
+            </select>
+        </div>
+        <button class="btn-genereer" id="btn-genereer" onclick="genereerKaarten()" disabled>
+            🎲 Genereer kaarten
+        </button>
+        <button class="btn-print" id="btn-print" onclick="window.print()" disabled>
+            🖨 Print kaarten
+        </button>
+        <span class="songs-info" id="songs-info">Playlist laden…</span>
+    </div>
+
+    <div class="preview-area">
+        <p class="preview-label" id="preview-label"></p>
+        <div class="preview-grid" id="preview-grid">
+            <p class="no-cards">Genereer kaarten om een voorbeeld te zien</p>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    const PIN = '1976';
+    const SUPABASE_URL = 'https://zweumhnigwyjfjuowzts.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_mf8ehnNab6mTM6qjoGIAxw_QrCc40nZ';
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const FREE_INDEX = 12;
+    let SONGS = [];
+
+    // ============================================================
+    // PIN
+    // ============================================================
+    let enteredPin = '';
+    if (sessionStorage.getItem('dj-auth') === 'ok') openApp();
+
+    function addDigit(d) {
+        if (enteredPin.length >= 4) return;
+        enteredPin += d; updateDots();
+        if (enteredPin.length === 4) setTimeout(checkPin, 80);
+    }
+    function deleteDigit() { enteredPin = enteredPin.slice(0, -1); updateDots(); }
+    function updateDots() {
+        for (let i = 0; i < 4; i++)
+            document.getElementById('dot-' + i).classList.toggle('filled', i < enteredPin.length);
+    }
+    function checkPin() {
+        if (enteredPin === PIN) { sessionStorage.setItem('dj-auth', 'ok'); openApp(); return; }
+        const err = document.getElementById('pin-error');
+        err.textContent = 'Onjuiste pincode — probeer opnieuw';
+        for (let i = 0; i < 4; i++)
+            document.getElementById('dot-' + i).style.background = 'rgba(255,0,102,0.7)';
+        setTimeout(() => {
+            enteredPin = ''; updateDots(); err.textContent = ' ';
+            for (let i = 0; i < 4; i++) document.getElementById('dot-' + i).style.background = '';
+        }, 1000);
+    }
+    function logout() { sessionStorage.removeItem('dj-auth'); location.reload(); }
+
+    // ============================================================
+    // APP
+    // ============================================================
+    async function openApp() {
+        document.getElementById('pin-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        await loadSongs();
+    }
+
+    async function loadSongs() {
+        const { data, error } = await db.from('bingo_songs').select('*').order('artist').order('title');
+        SONGS = data || [];
+        const info = document.getElementById('songs-info');
+        const btn  = document.getElementById('btn-genereer');
+        if (SONGS.length < 24) {
+            info.textContent = `⚠ Slechts ${SONGS.length} nummers — minimaal 24 nodig`;
+            info.style.color = 'rgba(255,0,102,0.7)';
+        } else {
+            info.innerHTML = `<strong>${SONGS.length}</strong> nummers in playlist`;
+            info.style.color = '';
+            btn.disabled = false;
+        }
+    }
+
+    // ============================================================
+    // KAART GENEREREN
+    // ============================================================
+    function shuffle(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function maakKaart() {
+        const picks = shuffle(SONGS).slice(0, 24);
+        const card = [];
+        for (let i = 0; i < 25; i++) {
+            card.push(i === FREE_INDEX ? null : picks[i < FREE_INDEX ? i : i - 1]);
+        }
+        return card;
+    }
+
+    function genereerKaarten() {
+        const aantal    = parseInt(document.getElementById('aantal-select').value, 10);
+        const sjabloon  = document.getElementById('sjabloon-select').value;
+        const grid      = document.getElementById('preview-grid');
+        const label     = document.getElementById('preview-label');
+
+        grid.innerHTML = '';
+        label.textContent = `${aantal} unieke kaarten — voorbeeld`;
+
+        const perPagina = sjabloon === 'mict' ? 1 : 2;
+        const quadClass = sjabloon === 'mict' ? 'page-quad mict-page' : 'page-quad';
+
+        for (let k = 1; k <= aantal; k += perPagina) {
+            let cards = '';
+            for (let i = k; i < k + perPagina && i <= aantal; i++) {
+                cards += renderKaart(maakKaart(), i, sjabloon);
+            }
+            grid.insertAdjacentHTML('beforeend', `<div class="${quadClass}">${cards}</div>`);
+        }
+
+        document.getElementById('btn-print').disabled = false;
+    }
+
+    function renderKaart(card, num, sjabloon = 'djjakob') {
+        const isMict = sjabloon === 'mict';
+
+        const cells = card.map((song, i) => {
+            if (i === FREE_INDEX) {
+                return isMict
+                    ? `<div class="card-cell free mict-free"><img src="./mict-logo.png" alt="MICT"></div>`
+                    : `<div class="card-cell free"></div>`;
+            }
+            return `
+                <div class="card-cell">
+                    <span class="cc-artist">${escHtml(song.artist)}</span>
+                    <span class="cc-title">${escHtml(song.title)}</span>
+                </div>`;
+        }).join('');
+
+        const header = isMict
+            ? `<img src="./mict-logo.png" alt="MICT" class="card-logo">
+               <span class="card-brand-name" style="color:#007e8a;">MICT Muziekbingo</span>
+               <span class="card-num">Kaart #${num}</span>`
+            : `<img src="./dj-jakob-logo-new.PNG" alt="DJ Jakob" class="card-logo">
+               <span class="card-brand-name">DJ Jakob</span>
+               <span class="card-num">Kaart #${num}</span>`;
+
+        const footer = isMict
+            ? `<span class="card-footer-url">djjakob.nl/muziekbingo</span>
+               <span class="card-footer-kaart">MICT — Kaart ${num}</span>`
+            : `<span class="card-footer-url">djjakob.nl/muziekbingo</span>
+               <span class="card-footer-kaart">Kaart ${num}</span>`;
+
+        return `
+        <div class="bingo-card">
+            <div class="card-header">${header}</div>
+            <div class="bingo-letters">
+                <div class="bl">B</div>
+                <div class="bl">I</div>
+                <div class="bl">N</div>
+                <div class="bl">G</div>
+                <div class="bl">O</div>
+            </div>
+            <div class="card-grid">${cells}</div>
+            <div class="card-footer">${footer}</div>
+        </div>`;
+    }
+
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+</script>
+
+</body>
+</html>
