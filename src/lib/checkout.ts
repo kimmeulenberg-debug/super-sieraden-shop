@@ -42,11 +42,18 @@ export interface CartItemInput {
   quantity: number;
 }
 
-export function computeOrderTotals(items: CartItemInput[], shippingOptionId: string) {
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * NL_VAT_RATE;
+const roundToCents = (amount: number) => Math.round(amount * 100) / 100;
+
+// Elk bedrag wordt op hele centen afgerond, zodat scherm, Stripe-bedrag en
+// database altijd exact hetzelfde totaal tonen.
+export function computeOrderTotals(
+  items: Pick<CartItemInput, "price" | "quantity">[],
+  shippingOptionId: string
+) {
+  const subtotal = roundToCents(items.reduce((sum, item) => sum + item.price * item.quantity, 0));
+  const tax = roundToCents(subtotal * NL_VAT_RATE);
   const shipping = getShippingOption(shippingOptionId).price;
-  const total = subtotal + tax + shipping;
+  const total = roundToCents(subtotal + tax + shipping);
   return { subtotal, tax, shipping, total };
 }
 
@@ -61,6 +68,8 @@ export function formatPrice(price: number) {
 const NL_POSTAL_CODE_REGEX = /^[1-9][0-9]{3}\s?[A-Za-z]{2}$/;
 // NL telefoonnummer: +31 of 0, gevolgd door 9 cijfers (spaties/streepjes toegestaan).
 const NL_PHONE_REGEX = /^(?:\+31|0)[\s-]?[1-9](?:[\s-]?[0-9]){8}$/;
+
+export const COUNTRIES = ["Nederland", "België", "Duitsland"] as const;
 
 export const billingSchema = z.object({
   firstName: z.string().trim().min(1, "Voornaam is verplicht"),
@@ -85,6 +94,13 @@ export const billingSchema = z.object({
 });
 
 export type BillingFormValues = z.infer<typeof billingSchema>;
+
+// Velden van een opgeslagen adres: dezelfde regels als bij het afrekenen.
+export const savedAddressSchema = billingSchema
+  .pick({ firstName: true, lastName: true, phone: true, address: true, city: true, postalCode: true, country: true })
+  .extend({ label: z.string().trim().min(1, "Geef het adres een naam, bv. Thuis").max(40, "Maximaal 40 tekens") });
+
+export type SavedAddressFormValues = z.infer<typeof savedAddressSchema>;
 
 export interface StoredOrder {
   orderId: string;

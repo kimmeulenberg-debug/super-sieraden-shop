@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   PRODUCT_CATEGORIES,
@@ -58,6 +59,7 @@ export default function ProductForm({
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(productFormSchema),
@@ -65,6 +67,34 @@ export default function ProductForm({
   });
 
   const imageUrl = watch("image_url");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploadError(null);
+    if (file.size > 4 * 1024 * 1024) {
+      setUploadError("De afbeelding is te groot (maximaal 4 MB).");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch("/api/products/upload", { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Uploaden mislukt.");
+      setValue("image_url", data.url, { shouldValidate: true, shouldDirty: true });
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Uploaden mislukt.");
+    } finally {
+      setIsUploading(false);
+    }
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-6">
@@ -133,8 +163,24 @@ export default function ProductForm({
         </div>
 
         <div className="sm:col-span-2">
-          <label htmlFor="image_url" className="text-sm font-medium text-ink">
-            Afbeelding-URL
+          <label htmlFor="image_file" className="text-sm font-medium text-ink">
+            Afbeelding uploaden
+          </label>
+          <input
+            id="image_file"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleFileChange}
+            disabled={isUploading}
+            className="mt-1 block w-full text-sm text-ink-soft file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-goud file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-goud-dark"
+          />
+          <p className="mt-1 text-xs text-ink-soft">
+            {isUploading ? "Bezig met uploaden..." : "JPG, PNG of WebP, maximaal 4 MB."}
+          </p>
+          {uploadError && <p role="alert" className="mt-1 text-xs text-red-600">{uploadError}</p>}
+
+          <label htmlFor="image_url" className="mt-4 block text-sm font-medium text-ink">
+            Afbeelding-URL (wordt automatisch ingevuld na het uploaden)
           </label>
           <input
             id="image_url"

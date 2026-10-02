@@ -1,11 +1,11 @@
 import { getSupabaseAdmin } from "@/lib/db";
 import { getStripeServer } from "@/lib/stripe-server";
+import { resolveCartItems, ProductServiceError, type CartLineInput } from "@/lib/products-db";
 import { randomBytes } from "node:crypto";
 import {
   computeOrderTotals,
   TIKKIE_MAX_TOTAL,
   type BillingFormValues,
-  type CartItemInput,
 } from "@/lib/checkout";
 
 /**
@@ -76,24 +76,6 @@ export class OrderServiceError extends Error {
   }
 }
 
-function isValidCartItems(items: unknown): items is CartItemInput[] {
-  return (
-    Array.isArray(items) &&
-    items.length > 0 &&
-    items.every(
-      (item) =>
-        item &&
-        typeof item.id === "string" &&
-        typeof item.name === "string" &&
-        typeof item.price === "number" &&
-        item.price > 0 &&
-        typeof item.quantity === "number" &&
-        Number.isInteger(item.quantity) &&
-        item.quantity > 0
-    )
-  );
-}
-
 /**
  * Controleert bij Stripe zelf dat deze betaling echt is gelukt en precies het
  * orderbedrag betreft. Zonder deze controle kan iedereen met een verzonnen
@@ -125,7 +107,8 @@ async function assertStripePaymentSucceeded(paymentIntentId: string, totalEuro: 
 }
 
 export interface CreateOrderInput {
-  items: CartItemInput[];
+  // Alleen id en aantal worden gebruikt; naam en prijs komen uit de database.
+  items: CartLineInput[];
   billing: BillingFormValues;
   paymentIntentId?: string;
   molliePaymentId?: string;
@@ -153,12 +136,22 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     );
   }
 
-  if (!isValidCartItems(input.items)) {
+  if (!Array.isArray(input.items) || input.items.length === 0) {
     throw new OrderServiceError("Ongeldige winkelmandje-items.", 400);
   }
 
+  let trustedItems;
+  try {
+    trustedItems = await resolveCartItems(input.items);
+  } catch (error) {
+    if (error instanceof ProductServiceError) {
+      throw new OrderServiceError(error.message, error.status);
+    }
+    throw error;
+  }
+
   const { billing } = input;
-  const { subtotal, tax, shipping, total } = computeOrderTotals(input.items, billing.shippingOption);
+  const { subtotal, tax, shipping, total } = computeOrderTotals(trustedItems, billing.shippingOption);
   const orderNumber = `ORD-${Date.now()}`;
   const paymentProvider = input.paymentProvider ?? "stripe";
 
@@ -231,7 +224,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     throw new OrderServiceError("De bestelling kon niet worden opgeslagen.", 500);
   }
 
-  const itemsPayload = input.items.map((item) => ({
+  const itemsPayload = trustedItems.map((item) => ({
     order_id: orderRow.id,
     product_id: item.id,
     product_name: item.name,

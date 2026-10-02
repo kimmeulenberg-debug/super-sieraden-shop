@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/store';
 import { useAuthStore } from '@/store/auth';
+import { useAccountStore } from '@/store/account';
 
 export default function AccountPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function AccountPage() {
   const user = useAuthStore((state) => state.user);
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const logout = useAuthStore((state) => state.logout);
+  const clearAccountData = useAccountStore((state) => state.clear);
 
   return (
     <main className="min-h-screen bg-white">
@@ -47,6 +49,7 @@ export default function AccountPage() {
               <button
                 onClick={() => {
                   logout();
+                  clearAccountData();
                   router.push('/');
                 }}
                 className="px-6 py-2 bg-red-500 text-white font-medium rounded hover:bg-red-600 transition-colors"
@@ -104,8 +107,7 @@ export default function AccountPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Mijn Bestellingen */}
             <Link
-              href="#"
-              onClick={(e) => e.preventDefault()}
+              href="/account/orders"
               className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
             >
               <div className="flex items-start gap-4">
@@ -135,8 +137,7 @@ export default function AccountPage() {
 
             {/* Persoonlijke Gegevens */}
             <Link
-              href="#"
-              onClick={(e) => e.preventDefault()}
+              href="/account/profile"
               className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
             >
               <div className="flex items-start gap-4">
@@ -165,8 +166,7 @@ export default function AccountPage() {
 
             {/* Adressen */}
             <Link
-              href="#"
-              onClick={(e) => e.preventDefault()}
+              href="/account/addresses"
               className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
             >
               <div className="flex items-start gap-4">

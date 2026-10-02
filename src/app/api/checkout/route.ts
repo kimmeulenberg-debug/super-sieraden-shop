@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getStripeServer } from "@/lib/stripe-server";
 import { getMollieClient, createMolliePayment } from "@/lib/mollie";
-import { computeOrderTotals, type CartItemInput } from "@/lib/checkout";
+import { computeOrderTotals } from "@/lib/checkout";
+import { resolveCartItems, ProductServiceError, type CartLineInput } from "@/lib/products-db";
 
 interface CheckoutRequestBody {
-  items: CartItemInput[];
+  items: CartLineInput[];
   shippingOption: string;
   paymentProvider?: "stripe" | "mollie";
   molliePaymentMethod?: "ideal" | "wero";
@@ -26,20 +27,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Winkelmandje is leeg." }, { status: 400 });
   }
 
-  const isValidItems = items.every(
-    (item) =>
-      typeof item.id === "string" &&
-      typeof item.price === "number" &&
-      item.price > 0 &&
-      typeof item.quantity === "number" &&
-      item.quantity > 0
-  );
-
-  if (!isValidItems) {
-    return NextResponse.json({ error: "Ongeldige winkelmandje-items." }, { status: 400 });
+  // Prijzen komen uit de database; alleen id en aantal van de browser worden gebruikt.
+  let trustedItems;
+  try {
+    trustedItems = await resolveCartItems(items);
+  } catch (error) {
+    if (error instanceof ProductServiceError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error("[api/checkout] Prijscontrole mislukt:", error);
+    return NextResponse.json({ error: "Er ging iets mis bij het controleren van je winkelmandje." }, { status: 500 });
   }
 
-  const { total } = computeOrderTotals(items, body.shippingOption);
+  const { total } = computeOrderTotals(trustedItems, body.shippingOption);
   const amountInCents = Math.round(total * 100);
 
   // STRIPE PAYMENT

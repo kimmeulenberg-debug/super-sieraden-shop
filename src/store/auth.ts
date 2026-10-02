@@ -14,6 +14,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, name: string, password: string) => Promise<void>;
   logout: () => void;
+  updateProfile: (changes: { name: string; email: string }) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -67,6 +68,10 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         set({ user: null, isLoggedIn: false });
+      },
+
+      updateProfile: ({ name, email }) => {
+        set((state) => (state.user ? { user: { ...state.user, name, email } } : state));
       },
     }),
     {

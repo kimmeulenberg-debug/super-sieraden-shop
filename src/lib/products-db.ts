@@ -285,6 +285,78 @@ export async function getActiveProductByHandle(handle: string): Promise<ProductR
   return byId;
 }
 
+export interface CartLineInput {
+  id: string;
+  quantity: number;
+}
+
+export interface TrustedCartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+const MAX_QUANTITY_PER_LINE = 99;
+
+/**
+ * Zet de winkelmandregels van de browser om naar vertrouwde regels: naam en
+ * prijs komen uit de database, nooit uit het verzoek. De browser bepaalt alleen
+ * welk product (id) en hoeveel (aantal). Onbekende of inactieve producten
+ * worden geweigerd, zodat een gemanipuleerde prijs nooit tot een betaling kan leiden.
+ */
+export async function resolveCartItems(lines: CartLineInput[]): Promise<TrustedCartItem[]> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new ProductServiceError(
+      "Prijzen controleren is niet beschikbaar: Supabase is niet geconfigureerd.",
+      503
+    );
+  }
+
+  const quantities = new Map<string, number>();
+  for (const line of lines) {
+    const validLine =
+      line &&
+      typeof line.id === "string" &&
+      UUID_REGEX.test(line.id) &&
+      Number.isInteger(line.quantity) &&
+      line.quantity > 0 &&
+      line.quantity <= MAX_QUANTITY_PER_LINE;
+    if (!validLine) {
+      throw new ProductServiceError("Ongeldige winkelmandje-items.", 400);
+    }
+    quantities.set(line.id, (quantities.get(line.id) ?? 0) + line.quantity);
+  }
+  if (quantities.size === 0) {
+    throw new ProductServiceError("Winkelmandje is leeg.", 400);
+  }
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, price")
+    .in("id", [...quantities.keys()])
+    .eq("is_active", true)
+    .returns<Pick<ProductRecord, "id" | "name" | "price">[]>();
+
+  if (error) {
+    console.error("[lib/products-db] Kon producten voor prijscontrole niet ophalen:", error);
+    throw new ProductServiceError("Producten konden niet worden gecontroleerd.", 500);
+  }
+
+  const byId = new Map((data ?? []).map((product) => [product.id, product]));
+  return [...quantities.entries()].map(([id, quantity]) => {
+    const product = byId.get(id);
+    if (!product) {
+      throw new ProductServiceError(
+        "Een of meer producten in je winkelmandje zijn niet meer beschikbaar. Ververs je winkelmandje en probeer het opnieuw.",
+        409
+      );
+    }
+    return { id, name: product.name, price: Number(product.price), quantity };
+  });
+}
+
 /**
  * Werk een product gedeeltelijk bij. Retourneert `null` als het niet bestaat.
  *

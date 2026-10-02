@@ -4,11 +4,8 @@ import AdminNav from "@/components/admin/AdminNav";
 /**
  * Layout voor het admin-dashboard. Bevat een eenvoudige navigatiebalk.
  *
- * Beveiliging: dit gedeelte heeft momenteel GEEN authenticatie. Elke
- * bezoeker die de URL kent, kan bij bestellingen, klantgegevens én producten.
- * Voeg vóór productiegebruik minimaal een wachtwoordbeveiliging toe (bv. via
- * Next.js Middleware met Basic Auth), en later een echte inlog met RBAC
- * per endpoint (niet per router/layout).
+ * Beveiliging: /admin en de wijzig-routes zitten achter Basic Auth
+ * (src/proxy.ts, wachtwoord uit ADMIN_PASSWORD).
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (

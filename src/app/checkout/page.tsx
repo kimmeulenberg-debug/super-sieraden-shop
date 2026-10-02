@@ -23,6 +23,8 @@ import {
   type BillingFormValues,
 } from "@/lib/checkout";
 import { useCartStore, type CartItem } from "@/store/store";
+import { useAccountStore } from "@/store/account";
+import { useAuthStore } from "@/store/auth";
 
 const PENDING_ORDER_KEY = "supSieradenShop_pendingOrder";
 const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -110,6 +112,23 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
   } = form;
 
   const paymentProvider = watch("paymentProvider");
+  const savedAddresses = useAccountStore((state) => state.addresses);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => setClientReady(true), []);
+
+  function applySavedAddress(addressId: string) {
+    const saved = savedAddresses.find((a) => a.id === addressId);
+    if (!saved) return;
+    const options = { shouldValidate: true, shouldDirty: true } as const;
+    form.setValue("firstName", saved.firstName, options);
+    form.setValue("lastName", saved.lastName, options);
+    form.setValue("phone", saved.phone, options);
+    form.setValue("address", saved.address, options);
+    form.setValue("city", saved.city, options);
+    form.setValue("postalCode", saved.postalCode, options);
+    form.setValue("country", saved.country, options);
+  }
   const tikkieAvailable = totals.total <= TIKKIE_MAX_TOTAL;
   const stripeNotReady = paymentProvider === "stripe" && (!stripe || !elements);
 
@@ -244,6 +263,28 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
             <h2 id="billing-heading" className="text-lg font-medium text-ink">
               Factuurgegevens
             </h2>
+            {clientReady && isLoggedIn && savedAddresses.length > 0 && (
+              <div>
+                <label htmlFor="savedAddress" className="text-sm font-medium text-ink">
+                  Kies een opgeslagen adres
+                </label>
+                <select
+                  id="savedAddress"
+                  defaultValue=""
+                  onChange={(event) => applySavedAddress(event.target.value)}
+                  className="mt-1 w-full rounded border border-border-soft bg-white px-3 py-2.5 text-sm text-ink outline-none transition-colors duration-150 ease-in-out focus:border-goud"
+                >
+                  <option value="" disabled>
+                    Selecteer een adres...
+                  </option>
+                  {savedAddresses.map((saved) => (
+                    <option key={saved.id} value={saved.id}>
+                      {saved.label} - {saved.address}, {saved.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="firstName" className="text-sm font-medium text-ink">
@@ -580,6 +621,30 @@ function CheckoutPageContent() {
     },
   });
 
+  // Vul standaardadres en e-mailadres van de ingelogde klant vooraf in.
+  useEffect(() => {
+    const { isLoggedIn, user } = useAuthStore.getState();
+    if (!isLoggedIn) return;
+    const { addresses } = useAccountStore.getState();
+    const preferred = addresses.find((a) => a.isDefault) ?? addresses[0];
+    form.reset({
+      ...form.getValues(),
+      ...(user ? { email: user.email } : {}),
+      ...(preferred
+        ? {
+            firstName: preferred.firstName,
+            lastName: preferred.lastName,
+            phone: preferred.phone,
+            address: preferred.address,
+            city: preferred.city,
+            postalCode: preferred.postalCode,
+            country: preferred.country,
+          }
+        : {}),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const shippingOption = form.watch("shippingOption");
   const totals = computeOrderTotals(items, shippingOption);
   const amountInCents = Math.max(Math.round(totals.total * 100), 0);
@@ -608,6 +673,7 @@ function CheckoutPageContent() {
       throw new Error(data.error ?? "De bestelling kon niet worden opgeslagen.");
     }
 
+    useAccountStore.getState().addOrder(data.orderId);
     clearCart();
     router.push(`/order-confirmation/${data.orderId}`);
   }
@@ -640,6 +706,7 @@ function CheckoutPageContent() {
       }
 
       window.localStorage.removeItem(PENDING_ORDER_KEY);
+      useAccountStore.getState().addOrder(data.orderId);
       clearCart();
       router.push(`/order-confirmation/${data.orderId}`);
     } catch (error) {
@@ -677,6 +744,7 @@ function CheckoutPageContent() {
       }
 
       window.localStorage.removeItem(PENDING_ORDER_KEY);
+      useAccountStore.getState().addOrder(data.orderId);
       clearCart();
       router.push(`/order-confirmation/${data.orderId}`);
     } catch (error) {
