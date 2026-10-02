@@ -129,7 +129,7 @@ export default function ProductForm({
 
         <div>
           <label htmlFor="price" className="text-sm font-medium text-ink">
-            Prijs (€)
+            Prijs incl. btw (€)
           </label>
           <input
             id="price"

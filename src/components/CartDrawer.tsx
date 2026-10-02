@@ -54,7 +54,7 @@ export default function CartDrawer() {
     };
   }, [isOpen, closeCart]);
 
-  const { subtotal, tax, total } = getCartTotals(items);
+  const { tax, total } = getCartTotals(items);
 
   return (
     <>
@@ -143,17 +143,13 @@ export default function CartDrawer() {
         )}
 
         <div className="border-t border-border-soft px-6 py-4">
-          <div className="flex justify-between text-sm text-ink-soft">
-            <span>Subtotaal</span>
-            <span>{formatPrice(subtotal)}</span>
+          <div className="flex justify-between text-base font-semibold text-ink">
+            <span>Totaal (incl. btw)</span>
+            <span>{formatPrice(total)}</span>
           </div>
           <div className="mt-1 flex justify-between text-sm text-ink-soft">
-            <span>BTW (21%)</span>
+            <span>Waarvan btw (21%)</span>
             <span>{formatPrice(tax)}</span>
-          </div>
-          <div className="mt-2 flex justify-between text-base font-semibold text-ink">
-            <span>Totaal</span>
-            <span>{formatPrice(total)}</span>
           </div>
           <Link
             href="/checkout"

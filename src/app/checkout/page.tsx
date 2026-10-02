@@ -13,6 +13,7 @@ import {
   useElements,
   useStripe,
 } from "@stripe/react-stripe-js";
+import type { Stripe, StripeElements } from "@stripe/stripe-js";
 import { getStripe } from "@/lib/stripe";
 import {
   billingSchema,
@@ -20,6 +21,8 @@ import {
   formatPrice,
   SHIPPING_OPTIONS,
   TIKKIE_MAX_TOTAL,
+  ENABLED_PAYMENT_PROVIDERS,
+  isPaymentProviderEnabled,
   type BillingFormValues,
 } from "@/lib/checkout";
 import { useCartStore, type CartItem } from "@/store/store";
@@ -62,16 +65,16 @@ function OrderSummary({ items, totals }: { items: CartItem[]; totals: Totals }) 
           <span>{formatPrice(totals.subtotal)}</span>
         </div>
         <div className="flex justify-between">
-          <span>BTW (21%)</span>
-          <span>{formatPrice(totals.tax)}</span>
-        </div>
-        <div className="flex justify-between">
           <span>Verzending</span>
           <span>{totals.shipping === 0 ? "Gratis" : formatPrice(totals.shipping)}</span>
         </div>
         <div className="mt-2 flex justify-between text-base font-semibold text-ink">
-          <span>Totaal</span>
+          <span>Totaal (incl. btw)</span>
           <span>{formatPrice(totals.total)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Waarvan btw (21%)</span>
+          <span>{formatPrice(totals.tax)}</span>
         </div>
       </div>
     </aside>
@@ -97,11 +100,27 @@ interface CheckoutFormProps {
   finalizeOrder: (paymentIntentId: string, paymentProvider: string) => Promise<void>;
   finalizeMollieOrder: (molliePaymentId: string) => Promise<void>;
   finalizeTikkieOrder: (billing: BillingFormValues) => Promise<void>;
+  stripe: Stripe | null;
+  elements: StripeElements | null;
 }
 
-function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder, finalizeTikkieOrder }: CheckoutFormProps) {
+// Haalt de Stripe-hooks op binnen <Elements>; alleen gebruikt als creditcard is ingeschakeld.
+function StripeCheckoutForm(props: Omit<CheckoutFormProps, "stripe" | "elements">) {
   const stripe = useStripe();
   const elements = useElements();
+  return <CheckoutForm {...props} stripe={stripe} elements={elements} />;
+}
+
+function CheckoutForm({
+  form,
+  items,
+  totals,
+  finalizeOrder,
+  finalizeMollieOrder,
+  finalizeTikkieOrder,
+  stripe,
+  elements,
+}: CheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -130,6 +149,10 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
     form.setValue("country", saved.country, options);
   }
   const tikkieAvailable = totals.total <= TIKKIE_MAX_TOTAL;
+  const noPaymentMethodAvailable =
+    paymentProvider === "tikkie" &&
+    !tikkieAvailable &&
+    ENABLED_PAYMENT_PROVIDERS.every((id) => id === "tikkie");
   const stripeNotReady = paymentProvider === "stripe" && (!stripe || !elements);
 
   async function onSubmit(data: BillingFormValues) {
@@ -443,6 +466,7 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
 
             {/* Payment Provider Selector */}
             <div className="flex flex-col gap-2">
+              {isPaymentProviderEnabled("tikkie") && (
               <label
                 className={clsx(
                   "flex items-center gap-3 rounded border border-border-soft px-4 py-3 transition-colors duration-150 ease-in-out has-[:checked]:border-goud",
@@ -465,6 +489,9 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
                   </span>
                 </span>
               </label>
+              )}
+
+              {isPaymentProviderEnabled("stripe") && (
 
               <label className="flex cursor-pointer items-center gap-3 rounded border border-border-soft px-4 py-3 transition-colors duration-150 ease-in-out has-[:checked]:border-goud">
                 <input
@@ -478,6 +505,9 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
                   <span className="text-xs text-ink-soft">Betaal veilig met creditcard of iDEAL</span>
                 </span>
               </label>
+              )}
+
+              {isPaymentProviderEnabled("mollie") && (
 
               <label className="flex cursor-pointer items-center gap-3 rounded border border-border-soft px-4 py-3 transition-colors duration-150 ease-in-out has-[:checked]:border-goud">
                 <input
@@ -491,6 +521,7 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
                   <span className="text-xs text-ink-soft">Betaal via Mollie (iDEAL of WERO)</span>
                 </span>
               </label>
+              )}
             </div>
 
             {/* Tikkie uitleg */}
@@ -557,12 +588,19 @@ function CheckoutForm({ form, items, totals, finalizeOrder, finalizeMollieOrder,
         </p>
       )}
 
+      {noPaymentMethodAvailable && (
+        <p role="alert" className="text-sm font-medium text-red-600">
+          Bestellingen boven {formatPrice(TIKKIE_MAX_TOTAL)} zijn momenteel niet mogelijk via de webshop.
+          Verwijder een artikel uit je winkelmandje of neem contact met ons op.
+        </p>
+      )}
+
       <button
         type="submit"
-        disabled={isSubmitting || stripeNotReady}
+        disabled={isSubmitting || stripeNotReady || noPaymentMethodAvailable}
         className={clsx(
           "flex w-full cursor-pointer items-center justify-center gap-2 rounded bg-goud py-3.5 text-base font-semibold text-white transition-colors duration-200 ease-in-out hover:bg-goud-dark",
-          (isSubmitting || stripeNotReady) && "cursor-not-allowed opacity-60"
+          (isSubmitting || stripeNotReady || noPaymentMethodAvailable) && "cursor-not-allowed opacity-60"
         )}
       >
         {isSubmitting && (
@@ -602,7 +640,8 @@ function CheckoutPageContent() {
   const clearCart = useCartStore((state) => state.clearCart);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const stripePromise = useMemo(() => getStripe(), []);
+  const stripeEnabled = isPaymentProviderEnabled("stripe");
+  const stripePromise = useMemo(() => (stripeEnabled ? getStripe() : null), [stripeEnabled]);
 
   const form = useForm<BillingFormValues>({
     resolver: zodResolver(billingSchema),
@@ -616,7 +655,7 @@ function CheckoutPageContent() {
       postalCode: "",
       country: "Nederland",
       shippingOption: "standard",
-      paymentProvider: "tikkie",
+      paymentProvider: ENABLED_PAYMENT_PROVIDERS[0],
       molliePaymentMethod: "ideal",
     },
   });
@@ -649,11 +688,12 @@ function CheckoutPageContent() {
   const totals = computeOrderTotals(items, shippingOption);
   const amountInCents = Math.max(Math.round(totals.total * 100), 0);
 
-  // Valt de winkelmand boven het Tikkie-maximum uit, schakel dan over naar Stripe.
+  // Valt de winkelmand boven het Tikkie-maximum uit, schakel dan over naar een andere ingeschakelde methode.
   const selectedProvider = form.watch("paymentProvider");
   useEffect(() => {
     if (selectedProvider === "tikkie" && totals.total > TIKKIE_MAX_TOTAL) {
-      form.setValue("paymentProvider", "stripe");
+      const alternative = ENABLED_PAYMENT_PROVIDERS.find((id) => id !== "tikkie");
+      if (alternative) form.setValue("paymentProvider", alternative);
     }
   }, [selectedProvider, totals.total, form]);
 
@@ -791,7 +831,7 @@ function CheckoutPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!STRIPE_PUBLISHABLE_KEY) {
+  if (stripeEnabled && !STRIPE_PUBLISHABLE_KEY) {
     return (
       <div className="mx-auto max-w-[600px] px-6 py-16 text-center">
         <h1 className="text-2xl font-medium text-ink">Afrekenen</h1>
@@ -842,13 +882,17 @@ function CheckoutPageContent() {
         </p>
       )}
       <div className="mt-8">
-        <Elements
-          stripe={stripePromise}
-          options={{ mode: "payment", amount: amountInCents || 100, currency: "eur" }}
-        >
-          <AmountSync amountInCents={amountInCents} />
-          <CheckoutForm form={form} items={items} totals={totals} finalizeOrder={finalizeOrder} finalizeMollieOrder={finalizeMollieOrder} finalizeTikkieOrder={finalizeTikkieOrder} />
-        </Elements>
+        {stripeEnabled ? (
+          <Elements
+            stripe={stripePromise}
+            options={{ mode: "payment", amount: amountInCents || 100, currency: "eur" }}
+          >
+            <AmountSync amountInCents={amountInCents} />
+            <StripeCheckoutForm form={form} items={items} totals={totals} finalizeOrder={finalizeOrder} finalizeMollieOrder={finalizeMollieOrder} finalizeTikkieOrder={finalizeTikkieOrder} />
+          </Elements>
+        ) : (
+          <CheckoutForm form={form} items={items} totals={totals} finalizeOrder={finalizeOrder} finalizeMollieOrder={finalizeMollieOrder} finalizeTikkieOrder={finalizeTikkieOrder} stripe={null} elements={null} />
+        )}
       </div>
     </div>
   );

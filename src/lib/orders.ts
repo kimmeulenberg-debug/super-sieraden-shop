@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import {
   computeOrderTotals,
   TIKKIE_MAX_TOTAL,
+  isPaymentProviderEnabled,
   type BillingFormValues,
 } from "@/lib/checkout";
 
@@ -154,6 +155,10 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const { subtotal, tax, shipping, total } = computeOrderTotals(trustedItems, billing.shippingOption);
   const orderNumber = `ORD-${Date.now()}`;
   const paymentProvider = input.paymentProvider ?? "stripe";
+
+  if (!isPaymentProviderEnabled(paymentProvider)) {
+    throw new OrderServiceError("Deze betaalmethode is momenteel niet beschikbaar.", 400);
+  }
 
   if (paymentProvider === "tikkie" && total > TIKKIE_MAX_TOTAL) {
     throw new OrderServiceError(

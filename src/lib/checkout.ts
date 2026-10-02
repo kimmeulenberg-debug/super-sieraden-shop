@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NL_VAT_RATE } from "@/store/store";
+import { vatIncludedIn } from "@/store/store";
 
 /**
  * Gedeelde checkout-logica tussen client (checkout-formulier) en server
@@ -44,17 +44,45 @@ export interface CartItemInput {
 
 const roundToCents = (amount: number) => Math.round(amount * 100) / 100;
 
-// Elk bedrag wordt op hele centen afgerond, zodat scherm, Stripe-bedrag en
+// Alle prijzen zijn inclusief btw: de btw wordt niet bovenop de prijs gerekend,
+// maar als aandeel van het totaal getoond (`tax` = btw die in het totaal zit).
+// Elk bedrag wordt op hele centen afgerond, zodat scherm, betaalbedrag en
 // database altijd exact hetzelfde totaal tonen.
 export function computeOrderTotals(
   items: Pick<CartItemInput, "price" | "quantity">[],
   shippingOptionId: string
 ) {
   const subtotal = roundToCents(items.reduce((sum, item) => sum + item.price * item.quantity, 0));
-  const tax = roundToCents(subtotal * NL_VAT_RATE);
   const shipping = getShippingOption(shippingOptionId).price;
-  const total = roundToCents(subtotal + tax + shipping);
+  const total = roundToCents(subtotal + shipping);
+  const tax = vatIncludedIn(total);
   return { subtotal, tax, shipping, total };
+}
+
+// Bestellingen van vóór de overstap naar prijzen inclusief btw hadden de btw
+// bovenop het subtotaal; daar klopt subtotaal + verzending niet met het totaal.
+export function isLegacyVatOnTop(order: { subtotal: number; shipping_cost: number; total: number }): boolean {
+  return Math.abs(order.subtotal + order.shipping_cost - order.total) > 0.01;
+}
+
+// Welke betaalmethoden de webshop aanbiedt. Standaard alleen Tikkie. Aanzetten
+// van creditcard (stripe) en Mollie: zet NEXT_PUBLIC_PAYMENT_PROVIDERS in Vercel
+// op bv. "tikkie,mollie,stripe" en deploy opnieuw.
+export const PAYMENT_PROVIDER_IDS = ["tikkie", "stripe", "mollie"] as const;
+export type PaymentProviderId = (typeof PAYMENT_PROVIDER_IDS)[number];
+
+const configuredProviders = (process.env.NEXT_PUBLIC_PAYMENT_PROVIDERS ?? "tikkie")
+  .split(",")
+  .map((value) => value.trim())
+  .filter((value): value is PaymentProviderId => (PAYMENT_PROVIDER_IDS as readonly string[]).includes(value));
+
+export const ENABLED_PAYMENT_PROVIDERS: PaymentProviderId[] = PAYMENT_PROVIDER_IDS.filter((id) =>
+  configuredProviders.includes(id)
+);
+if (ENABLED_PAYMENT_PROVIDERS.length === 0) ENABLED_PAYMENT_PROVIDERS.push("tikkie");
+
+export function isPaymentProviderEnabled(id: PaymentProviderId): boolean {
+  return ENABLED_PAYMENT_PROVIDERS.includes(id);
 }
 
 // Tikkie is alleen beschikbaar tot dit totaalbedrag (incl. btw en verzending).

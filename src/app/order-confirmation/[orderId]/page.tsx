@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { estimatedDeliveryDate, formatPrice } from "@/lib/checkout";
+import { estimatedDeliveryDate, formatPrice, isLegacyVatOnTop } from "@/lib/checkout";
 import type { PublicOrderRecord as OrderRecord, OrderItemRecord } from "@/lib/orders";
 
 function CheckIcon() {
@@ -151,18 +151,26 @@ export default function OrderConfirmationPage({
             <span>Subtotaal</span>
             <span>{formatPrice(order.subtotal)}</span>
           </div>
-          <div className="flex justify-between">
-            <span>BTW (21%)</span>
-            <span>{formatPrice(order.tax)}</span>
-          </div>
+          {isLegacyVatOnTop(order) && (
+            <div className="flex justify-between">
+              <span>BTW (21%)</span>
+              <span>{formatPrice(order.tax)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Verzending</span>
             <span>{order.shipping_cost === 0 ? "Gratis" : formatPrice(order.shipping_cost)}</span>
           </div>
           <div className="mt-2 flex justify-between text-base font-semibold text-ink">
-            <span>Totaal</span>
+            <span>Totaal (incl. btw)</span>
             <span>{formatPrice(order.total)}</span>
           </div>
+          {!isLegacyVatOnTop(order) && (
+            <div className="flex justify-between">
+              <span>Waarvan btw (21%)</span>
+              <span>{formatPrice(order.tax)}</span>
+            </div>
+          )}
         </div>
       </div>
 

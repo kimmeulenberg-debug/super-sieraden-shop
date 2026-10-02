@@ -233,13 +233,13 @@ function generateOrderConfirmationHTML(
               <span>Verzendkosten (${order.shipping_method})</span>
               <span>€${order.shipping_cost.toFixed(2)}</span>
             </div>
-            <div class="total-row">
-              <span>BTW (21%)</span>
-              <span>€${order.tax.toFixed(2)}</span>
-            </div>
             <div class="total-row final">
-              <span>Totale bedrag</span>
+              <span>Totale bedrag (incl. btw)</span>
               <span>€${order.total.toFixed(2)}</span>
+            </div>
+            <div class="total-row" style="border-bottom:none;color:#666;font-size:13px;">
+              <span>Waarvan btw (21%)</span>
+              <span>€${order.tax.toFixed(2)}</span>
             </div>
           </div>
         </div>

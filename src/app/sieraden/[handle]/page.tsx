@@ -53,6 +53,7 @@ export default async function ProductDetailPage({
           </h1>
           <p className="mt-2 text-lg font-semibold text-goud">
             {formatPrice(product.price)}
+            <span className="ml-2 text-xs font-normal text-ink-soft">incl. btw</span>
           </p>
           <AddToCartButton
             product={product}

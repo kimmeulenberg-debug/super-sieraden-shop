@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { OrderRecord } from '@/lib/orders';
+import { isLegacyVatOnTop } from '@/lib/checkout';
 
 interface OrderItem {
   id: string;
@@ -241,14 +242,22 @@ export default function AdminOrderDetailPage() {
               <span>Verzendkosten ({order.shipping_method})</span>
               <span>€{order.shipping_cost.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between mb-4 pb-4 border-b">
-              <span>BTW (21%)</span>
-              <span>€{order.tax.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-semibold">
-              <span>Totaal</span>
+            {isLegacyVatOnTop(order) && (
+              <div className="flex justify-between mb-2">
+                <span>BTW (21%, bovenop subtotaal)</span>
+                <span>€{order.tax.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-lg font-semibold border-t pt-4">
+              <span>Totaal (incl. btw)</span>
               <span>€{order.total.toFixed(2)}</span>
             </div>
+            {!isLegacyVatOnTop(order) && (
+              <div className="flex justify-between mt-2 text-sm text-gray-600">
+                <span>Waarvan btw (21%)</span>
+                <span>€{order.tax.toFixed(2)}</span>
+              </div>
+            )}
           </div>
 
           {/* Betaaldgegevens */}

@@ -47,8 +47,8 @@ export function itemsTable(items: OrderItemRecord[]): string {
 function totalsBlock(order: OrderRecord): string {
   const shipping = order.shipping_cost === 0 ? "Gratis" : formatPrice(order.shipping_cost);
   return `<p style="text-align:right;margin:4px 0;color:#666;">Verzending: ${shipping}</p>
-<p style="text-align:right;margin:4px 0;color:#666;">Waarvan btw (21%): ${formatPrice(order.tax)}</p>
-<p style="text-align:right;margin:8px 0;font-size:18px;font-weight:700;">Totaal: ${formatPrice(order.total)}</p>`;
+<p style="text-align:right;margin:8px 0;font-size:18px;font-weight:700;">Totaal (incl. btw): ${formatPrice(order.total)}</p>
+<p style="text-align:right;margin:4px 0;color:#666;font-size:13px;">Waarvan btw (21%): ${formatPrice(order.tax)}</p>`;
 }
 
 export function button(href: string, label: string): string {

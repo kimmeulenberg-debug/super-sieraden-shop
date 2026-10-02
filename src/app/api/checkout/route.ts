@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStripeServer } from "@/lib/stripe-server";
 import { getMollieClient, createMolliePayment } from "@/lib/mollie";
-import { computeOrderTotals } from "@/lib/checkout";
+import { computeOrderTotals, isPaymentProviderEnabled } from "@/lib/checkout";
 import { resolveCartItems, ProductServiceError, type CartLineInput } from "@/lib/products-db";
 
 interface CheckoutRequestBody {
@@ -22,6 +22,10 @@ export async function POST(request: Request) {
 
   const items = Array.isArray(body.items) ? body.items : [];
   const paymentProvider = body.paymentProvider || "stripe";
+
+  if (!isPaymentProviderEnabled(paymentProvider)) {
+    return NextResponse.json({ error: "Deze betaalmethode is momenteel niet beschikbaar." }, { status: 400 });
+  }
 
   if (items.length === 0) {
     return NextResponse.json({ error: "Winkelmandje is leeg." }, { status: 400 });

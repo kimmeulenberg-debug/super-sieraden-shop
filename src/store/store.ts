@@ -35,10 +35,15 @@ export interface CartItem {
 
 export const NL_VAT_RATE = 0.21;
 
+// Alle prijzen in de shop zijn consumentenprijzen inclusief btw. Dit is het
+// btw-deel dat in een bedrag zit (op hele centen afgerond).
+export function vatIncludedIn(grossAmount: number): number {
+  return Math.round(((grossAmount * NL_VAT_RATE) / (1 + NL_VAT_RATE)) * 100) / 100;
+}
+
 export function getCartTotals(items: CartItem[]) {
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * NL_VAT_RATE;
-  return { subtotal, tax, total: subtotal + tax };
+  const total = Math.round(items.reduce((sum, item) => sum + item.price * item.quantity, 0) * 100) / 100;
+  return { total, tax: vatIncludedIn(total) };
 }
 
 interface CartState {
