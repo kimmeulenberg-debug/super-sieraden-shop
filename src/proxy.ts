@@ -6,7 +6,7 @@ import type { NextRequest } from "next/server";
  * de gebruikersnaam maakt niet uit). Beschermd:
  *  - alle pagina's onder /admin
  *  - de orderlijst (GET /api/orders) met klantgegevens
- *  - het wijzigen van orders (PATCH /api/orders/:id), o.a. "markeer als betaald"
+ *  - alles behalve lezen onder /api/orders/:id (wijzigen, "markeer als betaald", melding opnieuw sturen)
  *  - het wijzigen van producten (alles behalve GET onder /api/products)
  * Zonder ADMIN_PASSWORD blijven deze routes dicht (fail closed).
  */
@@ -27,7 +27,7 @@ function isProtected(request: NextRequest): boolean {
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
   if (pathname === "/api/orders") return isRead;
-  if (pathname.startsWith("/api/orders/")) return method === "PATCH" || method === "PUT" || method === "DELETE";
+  if (pathname.startsWith("/api/orders/")) return !isRead;
   if (pathname === "/api/products" || pathname.startsWith("/api/products/")) return !isRead;
   return false;
 }

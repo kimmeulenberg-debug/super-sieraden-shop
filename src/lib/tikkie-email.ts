@@ -55,6 +55,40 @@ function button(href: string, label: string): string {
   return `<p style="text-align:center;margin:24px 0;"><a href="${escapeHtml(href)}" style="display:inline-block;background:#C9A961;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;">${escapeHtml(label)}</a></p>`;
 }
 
+function buildOwnerOrderEmail(order: OrderRecord, items: OrderItemRecord[], siteUrl: string) {
+  const adminUrl = `${siteUrl}/admin/orders/${order.id}`;
+  return {
+    to: adminEmail(),
+    subject: `Nieuwe Tikkie-bestelling ${order.order_number} - ${formatPrice(order.total)}`,
+    replyTo: order.customer_email,
+    html: layout(
+      "Nieuwe Tikkie-bestelling",
+      `<p>Er is een nieuwe bestelling die je met een Tikkie moet laten betalen.</p>
+<div style="background:#f9f9f9;padding:14px;border-radius:6px;margin:16px 0;">
+<strong>Voor je Tikkie</strong><br>
+Bedrag: <strong>${formatPrice(order.total)}</strong><br>
+Omschrijving: <strong>Super Sieraden Shop ${escapeHtml(order.order_number)}</strong><br>
+Naam: ${escapeHtml(order.customer_name)}<br>
+Telefoon: <strong>${order.customer_phone ? escapeHtml(order.customer_phone) : "-"}</strong><br>
+E-mail: ${escapeHtml(order.customer_email)}
+</div>
+<p><strong>Verzendadres</strong><br>${escapeHtml(order.customer_address ?? "")}<br>${escapeHtml(order.customer_postcode ?? "")} ${escapeHtml(order.customer_city ?? "")}<br>${escapeHtml(order.customer_country)}</p>
+${itemsTable(items)}${totalsBlock(order)}
+<p>Als je de betaling hebt ontvangen: open de bestelling en klik op "Markeer als betaald".</p>
+${button(adminUrl, "Bestelling openen")}`
+    ),
+  };
+}
+
+/** Stuurt alleen de melding naar de eigenaar (bv. opnieuw vanuit /admin). Geeft terug of de mail is verzonden. */
+export async function sendTikkieOwnerNotification(params: {
+  order: OrderRecord;
+  items: OrderItemRecord[];
+  siteUrl: string;
+}): Promise<boolean> {
+  return sendEmail(buildOwnerOrderEmail(params.order, params.items, params.siteUrl));
+}
+
 export async function sendTikkieOrderEmails(params: {
   order: OrderRecord;
   items: OrderItemRecord[];
@@ -62,7 +96,6 @@ export async function sendTikkieOrderEmails(params: {
 }): Promise<void> {
   const { order, items, siteUrl } = params;
   const confirmUrl = `${siteUrl}/tikkie/bevestigen/${order.tikkie_confirm_token}`;
-  const adminUrl = `${siteUrl}/admin/orders/${order.id}`;
 
   const customerHtml = layout(
     `Bestelling ${order.order_number} ontvangen`,
@@ -80,23 +113,6 @@ ${button(confirmUrl, "Ik heb de Tikkie betaald")}
 <p style="font-size:13px;color:#777;">Let op: deze knop is een melding aan ons. Je bestelling wordt pas verzonden nadat we de betaling zelf hebben gecontroleerd.</p>`
   );
 
-  const adminHtml = layout(
-    "Nieuwe Tikkie-bestelling",
-    `<p>Er is een nieuwe bestelling die je met een Tikkie moet laten betalen.</p>
-<div style="background:#f9f9f9;padding:14px;border-radius:6px;margin:16px 0;">
-<strong>Voor je Tikkie</strong><br>
-Bedrag: <strong>${formatPrice(order.total)}</strong><br>
-Omschrijving: <strong>Super Sieraden Shop ${escapeHtml(order.order_number)}</strong><br>
-Naam: ${escapeHtml(order.customer_name)}<br>
-Telefoon: <strong>${order.customer_phone ? escapeHtml(order.customer_phone) : "-"}</strong><br>
-E-mail: ${escapeHtml(order.customer_email)}
-</div>
-<p><strong>Verzendadres</strong><br>${escapeHtml(order.customer_address ?? "")}<br>${escapeHtml(order.customer_postcode ?? "")} ${escapeHtml(order.customer_city ?? "")}<br>${escapeHtml(order.customer_country)}</p>
-${itemsTable(items)}${totalsBlock(order)}
-<p>Als je de betaling hebt ontvangen: open de bestelling en klik op "Markeer als betaald".</p>
-${button(adminUrl, "Bestelling openen")}`
-  );
-
   await Promise.all([
     sendEmail({
       to: order.customer_email,
@@ -104,12 +120,7 @@ ${button(adminUrl, "Bestelling openen")}`
       html: customerHtml,
       replyTo: adminEmail(),
     }),
-    sendEmail({
-      to: adminEmail(),
-      subject: `Nieuwe Tikkie-bestelling ${order.order_number} - ${formatPrice(order.total)}`,
-      html: adminHtml,
-      replyTo: order.customer_email,
-    }),
+    sendTikkieOwnerNotification({ order, items, siteUrl }),
   ]);
 }
 

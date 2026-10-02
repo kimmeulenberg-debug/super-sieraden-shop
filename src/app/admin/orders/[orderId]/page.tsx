@@ -39,6 +39,8 @@ export default function AdminOrderDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState<string>('');
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [notifying, setNotifying] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -104,6 +106,22 @@ export default function AdminOrderDetailPage() {
       setError(err instanceof Error ? err.message : 'Markeren als betaald mislukt');
     } finally {
       setMarkingPaid(false);
+    }
+  };
+
+  const handleNotify = async () => {
+    try {
+      setNotifying(true);
+      setNotice(null);
+      const response = await fetch(`/api/orders/${orderId}/notify`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Melding versturen mislukt');
+      setNotice('Melding is verstuurd naar je e-mailadres.');
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Melding versturen mislukt');
+    } finally {
+      setNotifying(false);
     }
   };
 
@@ -269,6 +287,14 @@ export default function AdminOrderDetailPage() {
                   >
                     {markingPaid ? 'Bezig...' : 'Markeer als betaald'}
                   </button>
+                  <button
+                    onClick={handleNotify}
+                    disabled={notifying}
+                    className="mt-4 ml-3 px-6 py-2 border border-[#C9A961] text-[#8a6f2f] font-medium rounded-lg hover:bg-[#C9A961]/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {notifying ? 'Bezig...' : 'Melding opnieuw mailen'}
+                  </button>
+                  {notice && <p className="mt-3 text-sm text-green-700">{notice}</p>}
                 </>
               )}
             </div>
