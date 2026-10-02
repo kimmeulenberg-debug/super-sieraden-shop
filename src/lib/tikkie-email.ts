@@ -13,11 +13,11 @@ import type { OrderItemRecord, OrderRecord } from "@/lib/orders";
 const DEFAULT_ADMIN_EMAIL = "supersieradenshop@gmail.com";
 const SHOP_NAME = "supersieradenshop";
 
-function adminEmail(): string {
+export function adminEmail(): string {
   return process.env.ADMIN_NOTIFICATION_EMAIL || DEFAULT_ADMIN_EMAIL;
 }
 
-function layout(title: string, body: string): string {
+export function layout(title: string, body: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
 <div style="background:#f5f5f0;padding:24px;text-align:center;border-radius:8px;margin-bottom:24px;">
@@ -28,7 +28,7 @@ function layout(title: string, body: string): string {
 </body></html>`;
 }
 
-function itemsTable(items: OrderItemRecord[]): string {
+export function itemsTable(items: OrderItemRecord[]): string {
   const rows = items
     .map(
       (item) => `<tr>
@@ -51,7 +51,7 @@ function totalsBlock(order: OrderRecord): string {
 <p style="text-align:right;margin:8px 0;font-size:18px;font-weight:700;">Totaal: ${formatPrice(order.total)}</p>`;
 }
 
-function button(href: string, label: string): string {
+export function button(href: string, label: string): string {
   return `<p style="text-align:center;margin:24px 0;"><a href="${escapeHtml(href)}" style="display:inline-block;background:#C9A961;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;">${escapeHtml(label)}</a></p>`;
 }
 

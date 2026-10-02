@@ -9,6 +9,7 @@ import {
   ORDER_STATUSES,
 } from "@/lib/orders";
 import { sendTikkiePaidEmail } from "@/lib/tikkie-email";
+import { sendOrderShippedEmail } from "@/lib/shipped-email";
 
 /**
  * GET/PATCH voor een enkele order. Routes zijn thin: valideren, delegeren
@@ -73,6 +74,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   try {
     let updatedOrder = null;
+    let shippedEmailSent: boolean | undefined;
 
     if (parsed.data.paymentStatus === "paid") {
       const existing = await getOrderById(orderId);
@@ -86,14 +88,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     if (parsed.data.status) {
+      const before = parsed.data.status === "shipped" ? await getOrderById(orderId) : null;
       updatedOrder = await updateOrderStatus(orderId, parsed.data.status as typeof ORDER_STATUSES[number]);
+
+      // Alleen mailen bij de overgang naar "verzonden", niet bij herhaald opslaan.
+      if (updatedOrder && before && before.order.status !== "shipped") {
+        shippedEmailSent = await sendOrderShippedEmail({ order: updatedOrder, items: before.items });
+      }
     }
 
     if (!updatedOrder) {
       return NextResponse.json({ error: "Bestelling niet gevonden." }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, updatedOrder: stripOrderSecrets(updatedOrder) });
+    return NextResponse.json({ success: true, updatedOrder: stripOrderSecrets(updatedOrder), shippedEmailSent });
   } catch (error) {
     if (error instanceof OrderServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

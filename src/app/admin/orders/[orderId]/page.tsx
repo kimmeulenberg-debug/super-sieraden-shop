@@ -74,11 +74,17 @@ export default function AdminOrderDetailPage() {
         body: JSON.stringify({ status: newStatus }),
       });
 
-      if (!response.ok) throw new Error('Failed to update order');
-
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Status bijwerken mislukt');
+
       setOrder(data.updatedOrder);
+      setNotice(null);
       setError(null);
+      if (data.shippedEmailSent === true) {
+        setNotice('Status bijgewerkt. De klant is per e-mail op de hoogte gebracht dat de bestelling is verzonden.');
+      } else if (data.shippedEmailSent === false) {
+        setError('Status is bijgewerkt, maar de e-mail aan de klant kon niet worden verzonden (is RESEND_API_KEY ingesteld in Vercel?). Je kunt de mail opnieuw sturen met de knop onderaan.');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update');
     } finally {
@@ -109,14 +115,18 @@ export default function AdminOrderDetailPage() {
     }
   };
 
-  const handleNotify = async () => {
+  const handleNotify = async (type: 'owner' | 'shipped' = 'owner') => {
     try {
       setNotifying(true);
       setNotice(null);
-      const response = await fetch(`/api/orders/${orderId}/notify`, { method: 'POST' });
+      const response = await fetch(`/api/orders/${orderId}/notify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Melding versturen mislukt');
-      setNotice('Melding is verstuurd naar je e-mailadres.');
+      setNotice(type === 'shipped' ? 'Verzendmail is opnieuw naar de klant gestuurd.' : 'Melding is verstuurd naar je e-mailadres.');
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Melding versturen mislukt');
@@ -178,6 +188,7 @@ export default function AdminOrderDetailPage() {
           </div>
 
           {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">{error}</div>}
+          {notice && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">{notice}</div>}
 
           {/* Klantgegevens */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 p-4 bg-gray-50 rounded-lg">
@@ -288,13 +299,12 @@ export default function AdminOrderDetailPage() {
                     {markingPaid ? 'Bezig...' : 'Markeer als betaald'}
                   </button>
                   <button
-                    onClick={handleNotify}
+                    onClick={() => handleNotify('owner')}
                     disabled={notifying}
                     className="mt-4 ml-3 px-6 py-2 border border-[#C9A961] text-[#8a6f2f] font-medium rounded-lg hover:bg-[#C9A961]/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {notifying ? 'Bezig...' : 'Melding opnieuw mailen'}
                   </button>
-                  {notice && <p className="mt-3 text-sm text-green-700">{notice}</p>}
                 </>
               )}
             </div>
@@ -323,9 +333,21 @@ export default function AdminOrderDetailPage() {
                 disabled={updating || newStatus === order.status}
                 className="px-6 py-2 bg-[#C9A961] text-white font-medium rounded-lg hover:bg-[#B39450] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {updating ? 'Updating...' : 'Update'}
+                {updating ? 'Bezig...' : 'Update'}
               </button>
             </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Zodra je de status op &quot;Verzonden&quot; zet, ontvangt de klant automatisch een e-mail.
+            </p>
+            {order.status === 'shipped' && (
+              <button
+                onClick={() => handleNotify('shipped')}
+                disabled={notifying}
+                className="mt-3 text-sm font-medium text-[#8a6f2f] underline hover:text-[#C9A961] disabled:opacity-50"
+              >
+                {notifying ? 'Bezig...' : 'Verzendmail opnieuw naar de klant sturen'}
+              </button>
+            )}
           </div>
         </div>
       </div>
