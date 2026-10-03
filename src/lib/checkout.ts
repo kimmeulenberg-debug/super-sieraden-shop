@@ -21,7 +21,7 @@ export const SHIPPING_OPTIONS: ShippingOption[] = [
     id: "standard",
     label: "Standaard verzending",
     description: "3-5 werkdagen",
-    price: 0,
+    price: 1,
   },
   {
     id: "express",

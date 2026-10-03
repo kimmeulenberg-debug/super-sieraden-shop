@@ -297,10 +297,39 @@ export function escapeHtml(value: string): string {
  * mail alleen gelogd, zodat lokaal ontwikkelen zonder mailaccount blijft werken.
  * Gooit nooit: mailfouten mogen een bestelling niet laten mislukken.
  */
+/** Maakt een leesbare platte-tekstversie van een HTML-mail (spamfilters waarderen een tekstalternatief). */
+export function htmlToText(html: string): string {
+  const decode = (value: string) =>
+    value
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+  const stripTags = (value: string) => value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+
+  return decode(
+    html
+      .replace(/\s*\n\s*/g, ' ')
+      .replace(/<head[\s\S]*?<\/head>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_match, href: string, label: string) => `${stripTags(label)}: ${decode(href)}`)
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/t[dh]>/gi, '  ')
+      .replace(/<\/(p|div|tr|h[1-6]|li|table)>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+  )
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export async function sendEmail(params: {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   replyTo?: string;
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -323,6 +352,7 @@ export async function sendEmail(params: {
         to: params.to,
         subject: params.subject,
         html: params.html,
+        text: params.text ?? htmlToText(params.html),
         ...(params.replyTo ? { reply_to: params.replyTo } : {}),
       }),
     });
